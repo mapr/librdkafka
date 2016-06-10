@@ -45,6 +45,7 @@
 #include "rdkafka_cgrp.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_request.h"
+#include "rdkafka_event.h"
 
 #if WITH_SASL
 #include "rdkafka_sasl.h"
@@ -1074,6 +1075,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
+
+	if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
+		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_DR;
+	if (rk->rk_conf.rebalance_cb)
+		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_REBALANCE;
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);
