@@ -38,7 +38,8 @@ int rd_kafka_q_ready (rd_kafka_q_t *rkq) {
 
 enum {
         _Q_CB_GLOBAL,   /* rd_kafka_poll() */
-        _Q_CB_CONSUMER  /* rd_kafka_consumer_poll() */
+        _Q_CB_CONSUMER, /* rd_kafka_consumer_poll() */
+	_Q_CB_EVENT     /* return event */
 };
 
 
@@ -268,6 +269,14 @@ uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
 }
 
 
+
+rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
+				     int32_t version, int cb_type,
+				     int (*callback) (rd_kafka_t *rk,
+						      rd_kafka_op_t *rko,
+						      int cb_type,
+						      void *opaque),
+				     void *opaque);
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                int32_t version);
 int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,

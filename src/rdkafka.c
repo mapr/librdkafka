@@ -2018,6 +2018,11 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	rd_kafka_msg_t *rkm;
 	static int dcnt = 0;
 
+	/* Return-as-event requested, see if op can be converted to event,
+	 * otherwise fall through and trigger callbacks. */
+	if (cb_type == _Q_CB_EVENT && rd_kafka_event_setup(rk, rko))
+		return 0; /* Return as event */
+
 	switch ((int)rko->rko_type)
 	{
         case RD_KAFKA_OP_CALLBACK:
@@ -2164,6 +2169,17 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
 	return rd_kafka_q_serve(&rk->rk_rep, timeout_ms, 0,
 				_Q_CB_GLOBAL, rd_kafka_poll_cb, NULL);
+}
+
+
+rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms) {
+	rd_kafka_op_t *rko;
+	rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, timeout_ms, 0,
+				   _Q_CB_EVENT, rd_kafka_poll_cb, NULL);
+	if (!rko)
+		return NULL;
+
+	return rko;
 }
 
 

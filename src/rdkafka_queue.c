@@ -249,8 +249,23 @@ static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
  *
  * Locality: any thread.
  */
-rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
-                               int32_t version) {
+
+
+/**
+ * Serve q like rd_kafka_q_serve() until an op is found that can be returned
+ * as an event to the application.
+ *
+ * @returns the first event:able op, or NULL on timeout.
+ *
+ * Locality: any thread
+ */
+rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
+				     int32_t version, int cb_type,
+				     int (*callback) (rd_kafka_t *rk,
+						      rd_kafka_op_t *rko,
+						      int cb_type,
+						      void *opaque),
+				     void *opaque) {
 	rd_kafka_op_t *rko;
 
 	if (timeout_ms == RD_POLL_INFINITE)
@@ -266,9 +281,26 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                 ;
 
                         if (rko) {
+				int handled;
+
                                 /* Proper versioned op */
                                 rd_kafka_q_deq0(rkq, rko);
-                                break;
+
+				/* Ops with callbacks are considered handled
+				 * and we move on to the next op, if any.
+				 * Ops w/o callbacks are returned immediately */
+				if (callback) {
+					handled = callback(rkq->rkq_rk, rko,
+							   cb_type, opaque);
+					if (handled) {
+						rd_kafka_op_destroy(rko);
+						rko = NULL;
+					}
+				} else
+					handled = 0;
+
+				if (!handled)
+					break;
                         }
 
                         /* No op, wait for one */
@@ -295,12 +327,18 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                 /* Since the q_pop may block we need to release the parent
                  * queue's lock. */
                 mtx_unlock(&rkq->rkq_lock);
-		rko = rd_kafka_q_pop(fwdq, timeout_ms, version);
+		rko = rd_kafka_q_pop_serve(fwdq, timeout_ms, version,
+					   cb_type, callback, opaque);
                 rd_kafka_q_destroy(fwdq);
         }
 
 
 	return rko;
+}
+
+rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
+                               int32_t version) {
+	return rd_kafka_q_pop_serve(rkq, timeout_ms, version, 0, NULL, NULL);
 }
 
 
@@ -316,8 +354,7 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
 int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
                       int max_cnt, int cb_type,
                       int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                                       int cb_type,
-                                              void *opaque),
+                                       int cb_type, void *opaque),
                       void *opaque) {
         rd_kafka_t *rk = rkq->rkq_rk;
 	rd_kafka_op_t *rko;
