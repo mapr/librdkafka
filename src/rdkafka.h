@@ -1604,6 +1604,34 @@ RD_EXPORT
 void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
 
 
+/**
+ * @returns a reference to the main librdkafka event queue.
+ * This is the queue served by rd_kafka_poll().
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk);
+
+
+/**
+ * @returns a reference to the librdkafka consumer queue.
+ * This is the queue served by rd_kafka_consumer_poll().
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
+
+
+/**
+ * @brief Forward/re-route queue \p src to \p dst.
+ * If \p dst is \c NULL the forwarding is removed.
+ */
+RD_EXPORT
+void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
+
+
 /**@}*/
 
 /**

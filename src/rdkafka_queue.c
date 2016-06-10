@@ -583,28 +583,49 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 
 
 void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu) {
-        int do_destroy;
-
-        mtx_lock(&rkqu->rkqu_q.rkq_lock);
-        do_destroy = rkqu->rkqu_q.rkq_refcnt == 1;
-        mtx_unlock(&rkqu->rkqu_q.rkq_lock);
-	rd_kafka_q_destroy(&rkqu->rkqu_q);
-        if (!do_destroy)
-		return; /* Still references */
-
+	rd_kafka_q_destroy(rkqu->rkqu_q);
 	rd_free(rkqu);
 }
 
-rd_kafka_queue_t *rd_kafka_queue_new (rd_kafka_t *rk) {
+rd_kafka_queue_t *rd_kafka_queue_new0 (rd_kafka_t *rk, rd_kafka_q_t *rkq) {
 	rd_kafka_queue_t *rkqu;
 
 	rkqu = rd_calloc(1, sizeof(*rkqu));
 
-	rd_kafka_q_init(&rkqu->rkqu_q, rk);
+	rkqu->rkqu_q = rkq;
+	rd_kafka_q_keep(rkq);
 
         rkqu->rkqu_rk = rk;
 
 	return rkqu;
+}
+
+
+rd_kafka_queue_t *rd_kafka_queue_new (rd_kafka_t *rk) {
+	rd_kafka_q_t *rkq;
+	rd_kafka_queue_t *rkqu;
+
+	rkq = rd_kafka_q_new(rk);
+	rkqu = rd_kafka_queue_new0(rk, rkq);
+	rd_kafka_q_destroy(rkq); /* Loose refcount from q_new, one is held
+				  * by queue_new0 */
+	return rkqu;
+}
+
+
+rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk) {
+	return rd_kafka_queue_new0(rk, &rk->rk_rep);
+}
+
+
+rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk) {
+	if (!rk->rk_cgrp)
+		return NULL;
+	return rd_kafka_queue_new0(rk, &rk->rk_cgrp->rkcg_q);
+}
+
+void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {
+	rd_kafka_q_fwd_set(src->rkqu_q, dst ? dst->rkqu_q : NULL);
 }
 
 

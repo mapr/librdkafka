@@ -326,8 +326,8 @@ rd_kafka_op_t *rd_kafka_q_last (rd_kafka_q_t *rkq, rd_kafka_op_type_t op_type,
 
 /* Public interface */
 struct rd_kafka_queue_s {
-	rd_kafka_q_t rkqu_q;
-        rd_kafka_t  *rkqu_rk;
+	rd_kafka_q_t *rkqu_q;
+        rd_kafka_t   *rkqu_rk;
 };
 
 

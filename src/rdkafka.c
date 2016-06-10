@@ -1337,7 +1337,7 @@ int rd_kafka_consume_start_queue (rd_kafka_topic_t *app_rkt, int32_t partition,
 				  int64_t offset, rd_kafka_queue_t *rkqu) {
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
 
- 	return rd_kafka_consume_start0(rkt, partition, offset, &rkqu->rkqu_q);
+ 	return rd_kafka_consume_start0(rkt, partition, offset, rkqu->rkqu_q);
 }
 
 
@@ -1495,7 +1495,7 @@ ssize_t rd_kafka_consume_batch_queue (rd_kafka_queue_t *rkqu,
 				      rd_kafka_message_t **rkmessages,
 				      size_t rkmessages_size) {
 	/* Populate application's rkmessages array. */
-	return rd_kafka_consume_batch0(&rkqu->rkqu_q, timeout_ms,
+	return rd_kafka_consume_batch0(rkqu->rkqu_q, timeout_ms,
 				       rkmessages, rkmessages_size);
 }
 
@@ -1597,7 +1597,7 @@ int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
 							 *rkmessage,
 							 void *opaque),
 				     void *opaque) {
-	return rd_kafka_consume_callback0(&rkqu->rkqu_q, timeout_ms, 0,
+	return rd_kafka_consume_callback0(rkqu->rkqu_q, timeout_ms, 0,
 					  consume_cb, opaque);
 }
 
@@ -1710,7 +1710,7 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
 
 rd_kafka_message_t *rd_kafka_consume_queue (rd_kafka_queue_t *rkqu,
 					    int timeout_ms) {
-	return rd_kafka_consume0(rkqu->rkqu_rk, &rkqu->rkqu_q, timeout_ms);
+	return rd_kafka_consume0(rkqu->rkqu_rk, rkqu->rkqu_q, timeout_ms);
 }
 
 
