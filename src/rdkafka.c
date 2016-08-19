@@ -45,6 +45,12 @@
 #include "rdkafka_cgrp.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_request.h"
+//-----Marlin headers--------
+
+//#include "streams_common.h"
+#include "marlin_libs.h"
+
+//-----Marlin header end-----
 
 #if WITH_SASL
 #include "rdkafka_sasl.h"
@@ -514,7 +520,18 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 /* NOTE: Must only be called by application.
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy (rd_kafka_t *rk) {
-        rd_kafka_destroy_app(rk, 1);
+	if(is_marlin_consumer_or_producer(rk)==0)
+	{
+		if(is_marlin_producer(rk)==0)
+		{
+			streams_producer_destroy(rk->marlin_producer);
+		}
+		else
+		{
+			streams_consumer_destroy(rk->marlin_consumer);
+		}
+	}	
+	rd_kafka_destroy_app(rk, 1);
 }
 
 
@@ -1074,6 +1091,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
+	rk->marlin_consumer = NULL;
+	rk->marlin_producer = NULL;
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);
@@ -1207,9 +1226,47 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	return rk;
 }
 
+static void marlin_producer_wrapper_cb (int32_t err, streams_producer_record_t record, int partitionid, int64_t offset, void *ctx)
+{
+	marlin_producer_callback_ctx *wrapper_cb_ctx = (marlin_producer_callback_ctx *) ctx;
+	rd_kafka_t *rk = wrapper_cb_ctx->rk;
+	
+	//check for configured callback for message produced.	
+	if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) && (!rk->rk_conf.dr_err_only || err))
+	{
+		rd_kafka_msg_t *rkm;
+		char *str_produced;
+		void * key;
+		int msglen, keylen;
 
+		streams_producer_record_get_value(record, &str_produced, &msglen);
+		streams_producer_record_get_key(record, &key, &keylen);
 
+		if(wrapper_cb_ctx->topic != NULL)
+		{
+			rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(wrapper_cb_ctx->topic);
+		
+			create_marlin_message(itopic,partitionid, wrapper_cb_ctx->msgflags ,str_produced, msglen,key, keylen, wrapper_cb_ctx->msg_opaque,(rd_kafka_resp_err_t) err, &rkm);
+	
+		}
+	
+		rd_kafka_op_t *rko;
+		rko = rd_kafka_op_new(RD_KAFKA_OP_DR);
+		rko->rko_err = err;
+		rko->rko_rkt = wrapper_cb_ctx->topic;
+		rko->rko_rkm = rkm;
+		rd_kafka_msgq_init(&rko->rko_msgq);
+		//add message to queue
+		//marlin_producer_message_enq(&rko->rko_msgq, rkm);
+		rd_kafka_msgq_enq(&rko->rko_msgq, rkm);	
+		
+		//add op on replyq
+		rd_kafka_q_enq(&rk->rk_rep, rko); 
 
+	}
+	streams_producer_record_destroy(record);
+	rd_free(wrapper_cb_ctx);
+};
 
 /**
  * Produce a single message.
@@ -1220,11 +1277,73 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 		      void *payload, size_t len,
 		      const void *key, size_t keylen,
 		      void *msg_opaque) {
-	return rd_kafka_msg_new(rd_kafka_topic_a2i(rkt), partition,
+
+	rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
+
+	if(is_valid_marlin_topic_name(itopic->rkt_topic->str)== 0)
+	{
+		if(is_marlin_producer(itopic->rkt_rk)!=0)
+		{
+	       		create_marlin_producer(itopic->rkt_rk);
+		}
+		
+		return marlin_producer_send(itopic, partition, msgflags, key, keylen, payload, len,msg_opaque );
+	}
+	else
+	{
+		return rd_kafka_msg_new(itopic, partition,
 				msgflags, payload, len,
 				key, keylen, msg_opaque);
+	}
 }
 
+int create_marlin_producer(rd_kafka_t *rk)
+{
+	//create marlin config
+	streams_config_t config;
+ 	streams_config_create(&config);
+	
+	/*TODO: set ALL relevant kafka config to marlin producer config.	
+	*	
+	*	int buffer_max_ms = 0;//rk->rk_conf.buffering_max_ms; 
+	*	streams_config_set(config, "streams.buffer.max.time.ms", buffer_max_ms);
+  	*/
+
+	//create marlin producer
+	streams_producer_t producer;
+	streams_producer_create(config, &producer);
+
+	//update corresponding field in rd_kafka_new object
+	rk->marlin_producer = producer;
+	return 0;	
+}
+
+int marlin_producer_send(rd_kafka_itopic_t *irkt, int32_t partition,int msgflags, const void *key, size_t keylen, void *payload, size_t len, void *msg_opaque)
+{
+	//Create marlin producer record
+	/*
+	 *  TODO: optimize create by adding hashmap of streams_topic_partition_t inside rd_kafka_itopic_s
+	 */
+	streams_topic_partition_t tp;
+	streams_topic_partition_create(irkt->rkt_topic->str, partition-1, &tp);
+	
+	streams_producer_record_t record;
+	streams_producer_record_create(tp, key, keylen, payload, len, &record);
+
+	//Create marlin producer callback context
+	marlin_producer_callback_ctx *opaque_wrapper;
+	size_t ctxlen = sizeof(*opaque_wrapper);
+	opaque_wrapper = rd_malloc(ctxlen);
+	opaque_wrapper->rk = irkt->rkt_rk;
+	opaque_wrapper->msg_opaque = msg_opaque;
+	opaque_wrapper->topic = irkt->rkt_app_rkt;
+	opaque_wrapper->msgflags = msgflags;
+
+	streams_producer_send(irkt->rkt_rk->marlin_producer, record, marlin_producer_wrapper_cb, opaque_wrapper);
+
+	streams_topic_partition_destroy(tp);
+	return 0;
+}
 
 /**
  * Counts usage of the legacy/simple consumer (rd_kafka_consume_start() with
@@ -1245,7 +1364,23 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk) {
         return (int)rd_atomic32_add(&rk->rk_simple_cnt, 1);
 }
 
+int is_marlin_consumer (rd_kafka_t *rk){
+	if(rk->marlin_consumer != NULL)
+		return 0;
+	return 1;
+}
+int is_marlin_producer (rd_kafka_t *rk){
+	if(rk->marlin_producer != NULL)
+		return 0;
+	return 1;
+}
+int is_marlin_consumer_or_producer (rd_kafka_t *rk){
 
+	if(rk->marlin_producer!=NULL || rk->marlin_producer!=NULL){
+		return 0;
+       	}
+      	return 1;
+}
 
 
 /**
@@ -2081,9 +2216,9 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	case RD_KAFKA_OP_DR:
 		/* Delivery report:
 		 * call application DR callback for each message. */
-		while ((rkm = TAILQ_FIRST(&rko->rko_msgq.rkmq_msgs))) {
+		while ((rkm = TAILQ_FIRST(&rko->rko_msgq.rkmq_msgs))) 
+		{
 			TAILQ_REMOVE(&rko->rko_msgq.rkmq_msgs, rkm, rkm_link);
-
 			dcnt++;
 
                         if (rk->rk_conf.dr_msg_cb) {

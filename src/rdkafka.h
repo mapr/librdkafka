@@ -46,6 +46,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include "marlin_libs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -2500,6 +2501,15 @@ RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
 
 /**@}*/
+
+
+
+typedef struct producer_callback_ctx {
+	rd_kafka_t *rk;
+	rd_kafka_topic_t *topic;
+	int msgflags;
+	void *msg_opaque;
+}marlin_producer_callback_ctx;
 
 #ifdef __cplusplus
 }

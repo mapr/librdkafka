@@ -28,7 +28,6 @@
 
 #pragma once
 
-
 #ifndef _MSC_VER
 #define _GNU_SOURCE  /* for strndup() */
 #include <syslog.h>
@@ -147,6 +146,9 @@ struct rd_kafka_s {
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
+	streams_consumer_t marlin_consumer;
+	streams_producer_t marlin_producer;
+
 	char             rk_name[128];
 	rd_kafkap_str_t *rk_clientid;
 	rd_kafka_conf_t  rk_conf;
@@ -200,8 +202,10 @@ void rd_kafka_destroy_final (rd_kafka_t *rk);
 #define rd_kafka_is_simple_consumer(rk) \
         (rd_atomic32_get(&(rk)->rk_simple_cnt) > 0)
 int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
-
-
+int is_marlin_consumer (rd_kafka_t *rk);
+int is_marlin_producer (rd_kafka_t *rk);
+int is_marlin_consumer_or_producer (rd_kafka_t *rk);
+ 
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 
@@ -295,4 +299,3 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                       int cb_type, void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
-

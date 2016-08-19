@@ -84,7 +84,8 @@ lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK) lib-gen-pkg-config
 
 $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
-	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
+	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS) 
+	#$(LIB_MAPR)
 
 $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"

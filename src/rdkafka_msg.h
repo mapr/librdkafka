@@ -206,3 +206,5 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 
 int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 			      int do_lock);
+
+int create_marlin_message (rd_kafka_itopic_t *rkt, int32_t force_partition, int msgflags, char *payload, size_t len, const void *key, size_t keylen, void *msg_opaque, rd_kafka_resp_err_t err, rd_kafka_msg_t **rkm);

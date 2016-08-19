@@ -36,8 +36,8 @@
 #include "rdlog.h"
 #include "rdsysqueue.h"
 #include "rdtime.h"
-
-
+#include "types.h"
+//#include "streams_common.h"
 
 const char *rd_kafka_topic_state_names[] = {
         "unknown",
@@ -955,4 +955,9 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 
 void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
         return rd_kafka_topic_a2i(app_rkt)->rkt_conf.opaque;
+}
+
+int is_valid_marlin_topic_name (const char * topic_name){
+	const char *marlin_str_name = topic_name;
+	return streams_check_full_path_is_valid(marlin_str_name, NULL);
 }
