@@ -16,7 +16,7 @@ extern "C" {
   *
   * \return 0 on success, E_INVAL on bad input parameters.
   *
-  * config, and rebalance callbacks can be NULL.
+  * rebalance callbacks can be NULL.
   */
 STREAMS_API int32_t
 streams_consumer_create(const streams_config_t config,
@@ -44,11 +44,11 @@ streams_consumer_destroy(streams_consumer_t consumer);
   *
   * \return 0 on success. EINVAL on invalid inputs.
   *
-  * This topic partition will participate in the next poll cycle. The
+  * The specified topic partitions will participate in the next poll cycle. The
   * start offset for the subscription is set depending on the auto
   * offset reset policy. Subscriptions made through this API do not use the
-  * consumer's group management functionality. As such, there will be no
-  * rebalance operation triggered when group membership or cluster and topic
+  * consumer's group management functionality since its manual assignment.
+  * There will be no rebalance operation triggered when group membership or cluster and topic
   * metadata change.
   */
 STREAMS_API int32_t
@@ -178,7 +178,7 @@ streams_consumer_get_subscription(const streams_consumer_t consumer,
   * Fetches data for the topics or partitions specified using one of the
   * subscribe APIs. It is an error to not have subscribed to any topics or
   * partitions before polling for data. The offset used for fetching the data
-  * is governed by whether or not seek API is used. If seek is used, it will
+  * is governed by whether or not seek API (streams_consumer_seek*) is used. If seek is used, it will
   * use the specified offsets on startup and on every rebalance, to consume
   * data from that offset sequentially on every poll. If not, it will use the
   * last checkpointed offset using commit for the subscribed list of partitions.
@@ -352,10 +352,10 @@ streams_consumer_position(const streams_consumer_t consumer,
                           const streams_topic_partition_t tp,
                           int64_t *offset);
 
-/** \brief Get number of partitions for a topic
+/** \brief Get number of partitions for a topic partitions consumer is subscirbed to.
   * \param consumer [IN] : consumer handle
+  * \param topic_name [IN] : topic name 
   * \param num_partitions [OUT] : number of partitions for the topic
-  *
   * \return 0 on success. Error code on failure.
   *
   * Returns the number of partitions for the topic.  This function may
@@ -376,7 +376,6 @@ streams_consumer_get_num_partitions(const streams_consumer_t consumer,
   *                               topic in the stream
   * \param num_topics [OUT] : size of the two arrays, topic_names and
   *                           num_partitions
-  *
   * \return 0 on success. Error code on failure.
   *
   * Returns an array of topics for the provided stream.  If

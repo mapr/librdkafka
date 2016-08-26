@@ -57,7 +57,7 @@ streams_producer_send(const streams_producer_t producer,
                       const streams_producer_cb cb,
                       void *cb_ctx);
 
-/** \brief Flush all outstanding records for this producer immediately..
+/** \brief Flush all outstanding records for this producer immediately.
   * \param producer [IN] : producer handle
   *
   * \return 0 on success. EINVAL on invalid inputs.

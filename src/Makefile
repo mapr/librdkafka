@@ -20,7 +20,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdlog.c rdstring.c \
 		$(SRCS_y)
 
-HDRS=		rdkafka.h
+HDRS=		rdkafka.h streams.h streams_common.h streams_consumer.h streams_producer.h
 
 OBJS=		$(SRCS:.c=.o)
 

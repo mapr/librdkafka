@@ -202,9 +202,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk);
 #define rd_kafka_is_simple_consumer(rk) \
         (rd_atomic32_get(&(rk)->rk_simple_cnt) > 0)
 int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
-int is_marlin_consumer (rd_kafka_t *rk);
-int is_marlin_producer (rd_kafka_t *rk);
-int is_marlin_consumer_or_producer (rd_kafka_t *rk);
+bool is_marlin_consumer (rd_kafka_t *rk);
+bool is_marlin_producer (rd_kafka_t *rk);
+bool is_marlin_consumer_or_producer (rd_kafka_t *rk);
  
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"

@@ -38,9 +38,8 @@
 #include "rdsysqueue.h"
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
-
-	if(is_marlin_producer(rk) != 0)
-	{	rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
+	if(!is_marlin_producer(rk)) {
+		rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
 		(void)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
 	}
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
@@ -484,18 +483,34 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 	return 0;
 }
 
-int create_marlin_message (rd_kafka_itopic_t *rkt, int32_t force_partition, int msgflags, char *payload, size_t len, const void *key, size_t keylen, void *msg_opaque, rd_kafka_resp_err_t err, rd_kafka_msg_t **rkm) 
-{
+int create_marlin_message (rd_kafka_itopic_t *rkt, 
+		int32_t force_partition, 
+		int msgflags, 
+		char *payload, 
+		size_t len, 
+		const void *key,
+	       	size_t keylen, 
+		void *msg_opaque, 
+		rd_kafka_resp_err_t err, 
+		rd_kafka_msg_t **rkm) {
 	int errnox = 0;
-
-	*rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, payload, len, key, keylen, msg_opaque, &err, &errnox, rd_uclock(), rd_clock());  
+	*rkm = rd_kafka_msg_new0(rkt, 
+			force_partition, 
+			msgflags, 
+			payload, 
+			len, 
+			key, 
+			keylen, 
+			msg_opaque, 
+			&err, 
+			&errnox, 
+			rd_uclock(), 
+			rd_clock());  
 	    
-	if (unlikely(!*rkm)) 
-	{
+	if (unlikely(!*rkm)) {
 		rd_kafka_set_last_error(err, errnox);
 		return -1;
 	}
-
 	return 0;
 }
 

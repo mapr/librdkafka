@@ -4,6 +4,7 @@
 #define STREAMS_COMMON_H__
 
 #include "types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -120,7 +121,7 @@ streams_config_create(streams_config_t *config);
   * "auto.commit.interval.ms": (default 1000) The frequency in ms that the
   * consumer offsets are committed to streams server.
   *
-  * "max.partition.fetch.bytes": (default 1024 * 1024) The number of byes of
+  * "max.partition.fetch.bytes": (default 1024 * 1024) The number of bytes of
   * messages to attempt to fetch for each topic-partition in each fetch request.
   * These bytes will be read into memory for each partition, so this helps
   * control the memory used by the consumer.
@@ -131,9 +132,7 @@ streams_config_create(streams_config_t *config);
   *
   * "auto.offset.reset": (default largest) What to do when there is no initial
   * offset in Streams or if an offset is out of range:
-  *
   * earliest : automatically reset the offset to the earliest offset
-  *
   * latest : automatically reset the offset to the latest offset
   * anything else: throw an error to the consumer.
   *
@@ -162,12 +161,13 @@ streams_config_destroy(streams_config_t config);
  */
 STREAMS_API int32_t
 streams_config_print(const streams_config_t config);
+
 /**
- *\brief Inspect the fullPath and confirm if this is valid marlin path (path:topic_name)
+ *\brief Inspect the fullPath and confirm if this is valid marlin path (</path>:<topic_name>)
  *\return 1 if path is valid and 0 if path is not.
  */
-STREAMS_API int32_t
-streams_check_full_path_is_valid(const char *fullPath, bool *isRegex);
+STREAMS_API bool
+streams_is_full_path_valid(const char *fullPath, bool *isRegex);
 
 #ifdef __cplusplus
 }  /* extern "C" */
