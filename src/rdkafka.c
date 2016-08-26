@@ -527,7 +527,7 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
 		else if (is_streams_consumer(rk)) {
 			streams_consumer_destroy(rk->streams_consumer);
 		}
-	}	
+	}
 	rd_kafka_destroy_app(rk, 1);
 }
 
@@ -1088,7 +1088,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
-	/* Initiate Marlin components */
+	/* Initiate Streams components */
 	rk->streams_consumer = NULL;
 	rk->streams_producer = NULL;
 	
