@@ -38,7 +38,7 @@
 #include "rdsysqueue.h"
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
-	if(!is_marlin_producer(rk)) {
+	if(!is_streams_producer(rk)) {
 		rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
 		(void)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
 	}
@@ -483,7 +483,7 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 	return 0;
 }
 
-int create_marlin_message (rd_kafka_itopic_t *rkt, 
+int create_streams_message (rd_kafka_itopic_t *rkt, 
 		int32_t force_partition, 
 		int msgflags, 
 		char *payload, 
@@ -513,10 +513,3 @@ int create_marlin_message (rd_kafka_itopic_t *rkt,
 	}
 	return 0;
 }
-
-/*
- * void marlin_producer_message_enq(rd_kafka_msgq_t *rkmq, rd_kafka_msg_t *rkm){
-
-	rd_kafka_msgq_enq(rkmq, rkm);	
-}
-*/

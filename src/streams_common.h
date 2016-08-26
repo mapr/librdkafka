@@ -164,7 +164,7 @@ streams_config_print(const streams_config_t config);
 
 /**
  *\brief Inspect the fullPath and confirm if this is valid marlin path (</path>:<topic_name>)
- *\return 1 if path is valid and 0 if path is not.
+ *\return true if path is valid and false if path is not.
  */
 STREAMS_API bool
 streams_is_full_path_valid(const char *fullPath, bool *isRegex);

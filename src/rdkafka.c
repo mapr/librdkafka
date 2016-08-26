@@ -46,12 +46,12 @@
 #include "rdkafka_assignor.h"
 #include "rdkafka_request.h"
 
-//-----Marlin headers--------
+//-----Streams headers--------
 #include "streams_common.h"
 #include "streams_consumer.h"
 #include "streams_producer.h"
 #include "streams.h"
-#include "marlin_wrapper.h"
+#include "streams_wrapper.h"
 
 #if WITH_SASL
 #include "rdkafka_sasl.h"
@@ -521,11 +521,11 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 /* NOTE: Must only be called by application.
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy(rd_kafka_t *rk) {
-	if (is_marlin_consumer_or_producer(rk)) {
-		if (is_marlin_producer(rk))
-			streams_producer_destroy(rk->marlin_producer);
-		else if (is_marlin_consumer(rk)) {
-			streams_consumer_destroy(rk->marlin_consumer);
+	if (is_streams_consumer_or_producer(rk)) {
+		if (is_streams_producer(rk))
+			streams_producer_destroy(rk->streams_producer);
+		else if (is_streams_consumer(rk)) {
+			streams_consumer_destroy(rk->streams_consumer);
 		}
 	}	
 	rd_kafka_destroy_app(rk, 1);
@@ -1089,8 +1089,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
 	/* Initiate Marlin components */
-	rk->marlin_consumer = NULL;
-	rk->marlin_producer = NULL;
+	rk->streams_consumer = NULL;
+	rk->streams_producer = NULL;
 	
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);
@@ -1224,12 +1224,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	return rk;
 }
 
-static void marlin_producer_wrapper_cb (int32_t err, 
+static void streams_producer_wrapper_cb (int32_t err, 
 		streams_producer_record_t record, 
 		int partitionid, 
 		int64_t offset, 
 		void *ctx) {
-	marlin_producer_callback_ctx *wrapper_cb_ctx = (marlin_producer_callback_ctx *) ctx;
+	streams_producer_callback_ctx *wrapper_cb_ctx = (streams_producer_callback_ctx *) ctx;
 	rd_kafka_t *rk = wrapper_cb_ctx->rk;
 	
 	//check for configured callback for message produced.	
@@ -1245,7 +1245,7 @@ static void marlin_producer_wrapper_cb (int32_t err,
 		
 		if (wrapper_cb_ctx->topic != NULL) {
 			rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(wrapper_cb_ctx->topic);
-			create_marlin_message(itopic, 
+			create_streams_message(itopic, 
 					partitionid, 
 					wrapper_cb_ctx->msgflags, 
 					(char *)str_produced, 
@@ -1273,23 +1273,23 @@ static void marlin_producer_wrapper_cb (int32_t err,
 	rd_free(wrapper_cb_ctx);
 };
 
-void create_marlin_producer(rd_kafka_t *rk) {
-	//create marlin config
+void create_streams_producer(rd_kafka_t *rk) {
+	//create streams config
 	streams_config_t config;
  	streams_config_create(&config);
 	
-	//TODO: set ALL relevant kafka config to marlin producer config.	
+	//TODO: set ALL relevant kafka config to streams producer config.	
 
-	//create marlin producer
+	//create streams producer
 	streams_producer_t producer;
 	streams_producer_create(config, &producer);
 
 	//update corresponding field in rd_kafka_new object
-	rk->marlin_producer = producer;
+	rk->streams_producer = producer;
 }
 
 
-int marlin_producer_send(rd_kafka_itopic_t *irkt, 
+int streams_producer_send(rd_kafka_itopic_t *irkt, 
 		int32_t partition,
 		int msgflags, 
 		const void *key, 
@@ -1297,15 +1297,15 @@ int marlin_producer_send(rd_kafka_itopic_t *irkt,
 		void *payload, 
 		size_t len, 
 		void *msg_opaque) {
-	//Create marlin producer record
+	//Create streams producer record
 	streams_topic_partition_t tp;
 	streams_topic_partition_create(irkt->rkt_topic->str, partition, &tp);
 	
 	streams_producer_record_t record;
 	streams_producer_record_create(tp, key, keylen, payload, len, &record);
 
-	//Create marlin producer callback context
-	marlin_producer_callback_ctx *opaque_wrapper;
+	//Create streams producer callback context
+	streams_producer_callback_ctx *opaque_wrapper;
 	size_t ctxlen = sizeof(*opaque_wrapper);
 	opaque_wrapper = rd_malloc(ctxlen);
 	opaque_wrapper->rk = irkt->rkt_rk;
@@ -1313,9 +1313,9 @@ int marlin_producer_send(rd_kafka_itopic_t *irkt,
 	opaque_wrapper->topic = irkt->rkt_app_rkt;
 	opaque_wrapper->msgflags = msgflags;
 	
-	int result = streams_producer_send(irkt->rkt_rk->marlin_producer, 
+	int result = streams_producer_send(irkt->rkt_rk->streams_producer, 
 			record, 
-			marlin_producer_wrapper_cb, 
+			streams_producer_wrapper_cb, 
 			opaque_wrapper);
 	streams_topic_partition_destroy(tp);
 	return result;
@@ -1331,17 +1331,17 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		const void *key, size_t keylen,
 		void *msg_opaque) {
 	rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
-	if (is_valid_marlin_topic_name(itopic->rkt_topic->str)) {
-		if (!is_marlin_producer(itopic->rkt_rk))
-			create_marlin_producer(itopic->rkt_rk);
+	if (is_valid_streams_topic_name(itopic->rkt_topic->str)) {
+		if (!is_streams_producer(itopic->rkt_rk))
+			create_streams_producer(itopic->rkt_rk);
 		/*
 		 * TODO: Support partitioner callback.
 		 */
 		if (partition == RD_KAFKA_PARTITION_UA)
 			partition = INVALID_PARTITION_ID;
 		
-		//Producing to marlin
-		return marlin_producer_send(itopic, 
+		//Producing to streams
+		return streams_producer_send(itopic, 
 				partition, 
 				msgflags, 
 				key, 
@@ -1375,20 +1375,20 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk) {
         return (int)rd_atomic32_add(&rk->rk_simple_cnt, 1);
 }
 
-bool is_marlin_consumer(rd_kafka_t *rk) {
-	if (rk->marlin_consumer != NULL)
+bool is_streams_consumer(rd_kafka_t *rk) {
+	if (rk->streams_consumer != NULL)
 		return true;
 	return false;
 }
 
-bool is_marlin_producer(rd_kafka_t *rk) {
-	if (rk->marlin_producer != NULL)
+bool is_streams_producer(rd_kafka_t *rk) {
+	if (rk->streams_producer != NULL)
 		return true;
 	return false;
 }
 
-bool is_marlin_consumer_or_producer(rd_kafka_t *rk) {
-	if (rk->marlin_producer!=NULL || rk->marlin_producer!=NULL){
+bool is_streams_consumer_or_producer(rd_kafka_t *rk) {
+	if (rk->streams_producer!=NULL || rk->streams_producer!=NULL){
 		return true;
        	}
       	return false;

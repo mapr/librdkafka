@@ -362,7 +362,6 @@ streams_consumer_position(const streams_consumer_t consumer,
   * make a rpc to the server to fetch the topic metadata, unless the
   * client already has it cached.
   */
-
 STREAMS_API int32_t
 streams_consumer_get_num_partitions(const streams_consumer_t consumer,
                                     const char *topic_name,
@@ -384,7 +383,6 @@ streams_consumer_get_num_partitions(const streams_consumer_t consumer,
   * stream is not set in the configuration, returns an error.  The
   * caller is responsible for freeing the arrays returned.
   */
-
 STREAMS_API int32_t
 streams_consumer_list_topics(const streams_consumer_t consumer,
                              const char *stream_name,
