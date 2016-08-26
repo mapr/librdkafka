@@ -1245,7 +1245,7 @@ static void streams_producer_wrapper_cb (int32_t err,
 		
 		if (wrapper_cb_ctx->topic != NULL) {
 			rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(wrapper_cb_ctx->topic);
-			create_streams_message(itopic, 
+			streams_message_create(itopic, 
 					partitionid, 
 					wrapper_cb_ctx->msgflags, 
 					(char *)str_produced, 
@@ -1273,7 +1273,7 @@ static void streams_producer_wrapper_cb (int32_t err,
 	rd_free(wrapper_cb_ctx);
 };
 
-void create_streams_producer(rd_kafka_t *rk) {
+void streams_producer_create_wrapper(rd_kafka_t *rk) {
 	//create streams config
 	streams_config_t config;
  	streams_config_create(&config);
@@ -1289,7 +1289,7 @@ void create_streams_producer(rd_kafka_t *rk) {
 }
 
 
-int streams_producer_send(rd_kafka_itopic_t *irkt, 
+int streams_producer_send_wrapper(rd_kafka_itopic_t *irkt, 
 		int32_t partition,
 		int msgflags, 
 		const void *key, 
@@ -1331,9 +1331,9 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		const void *key, size_t keylen,
 		void *msg_opaque) {
 	rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
-	if (is_valid_streams_topic_name(itopic->rkt_topic->str)) {
+	if (streams_is_valid_topic_name(itopic->rkt_topic->str)) {
 		if (!is_streams_producer(itopic->rkt_rk))
-			create_streams_producer(itopic->rkt_rk);
+			streams_producer_create_wrapper(itopic->rkt_rk);
 		/*
 		 * TODO: Support partitioner callback.
 		 */
@@ -1341,7 +1341,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 			partition = INVALID_PARTITION_ID;
 		
 		//Producing to streams
-		return streams_producer_send(itopic, 
+		return streams_producer_send_wrapper(itopic, 
 				partition, 
 				msgflags, 
 				key, 

@@ -1,5 +1,5 @@
-#ifndef MARLIN_WRAPPER_H
-#define MARLIN_WRAPPER_H
+#ifndef STREAMS_WRAPPER_H
+#define STREAMS_WRAPPER_H
 
 #include "rdkafka.h"
 

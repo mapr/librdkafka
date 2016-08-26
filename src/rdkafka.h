@@ -46,7 +46,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <sys/types.h>
-#include "marlin_libs.h"
+#include "streams_util.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -144,4 +144,4 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
-bool is_valid_streams_topic_name (const char *topic_name);
+bool streams_is_valid_topic_name (const char *topic_name);
