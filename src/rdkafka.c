@@ -521,12 +521,10 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 /* NOTE: Must only be called by application.
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy(rd_kafka_t *rk) {
-	if (is_streams_consumer_or_producer(rk)) {
-		if (is_streams_producer(rk))
-			streams_producer_destroy(rk->streams_producer);
-		else if (is_streams_consumer(rk)) {
-			streams_consumer_destroy(rk->streams_consumer);
-		}
+	if (is_streams_producer(rk)) {
+		streams_producer_destroy(rk->streams_producer);
+	} else if (is_streams_consumer(rk)) {
+		streams_consumer_destroy(rk->streams_consumer);
 	}
 	rd_kafka_destroy_app(rk, 1);
 }

@@ -957,5 +957,5 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
 }
 
 bool streams_is_valid_topic_name (const char * topic_name) {
-	return streams_is_full_path_valid(topic_name, false/*isRegex*/);
+	return streams_is_full_path_valid(topic_name, NULL/*isRegex*/);
 }
