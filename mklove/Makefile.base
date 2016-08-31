@@ -7,6 +7,7 @@ MKL_YELLOW?=	\033[033m
 MKL_BLUE?=	\033[034m
 MKL_CLR_RESET?=	\033[0m
 
+LIBS += 	$(LIB_MAPR)
 DEPS=		$(OBJS:%.o=%.d)
 
 # TOPDIR is "TOPDIR/mklove/../" i.e., TOPDIR.
@@ -84,7 +85,7 @@ lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK) lib-gen-pkg-config
 
 $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
-	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS) $(LIB_MAPR) 
+	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS) 
 
 $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"

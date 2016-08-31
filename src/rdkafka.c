@@ -47,10 +47,12 @@
 #include "rdkafka_request.h"
 
 //-----Streams headers--------
-#include "streams_common.h"
+/*#include "streams_common.h"
 #include "streams_consumer.h"
 #include "streams_producer.h"
 #include "streams.h"
+*/
+#include "streams_util.h"
 #include "streams_wrapper.h"
 
 #if WITH_SASL
