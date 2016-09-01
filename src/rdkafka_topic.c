@@ -960,3 +960,147 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
 bool streams_is_valid_topic_name (const char * topic_name) {
 	return streams_is_full_path_valid(topic_name, NULL/*isRegex*/);
 }
+
+void streams_topic_free (char **streams_topics,
+			 int num_topics) {
+	int i;
+	for(i=0; i< num_topics; i++)
+		rd_free((void *)streams_topics[i]);
+
+	rd_free(streams_topics);
+}
+
+int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
+			 char ** streams_topics,
+			 int *tcount) {
+	int streams_topic_count = 0;
+	int kafka_topic_count = 0;
+	int i;
+	for (i=0; i < topics->cnt; i++) {
+		const char *topic_name =  (topics->elems[i]).topic;
+		if (streams_is_valid_topic_name(topic_name)) {
+			streams_topics[streams_topic_count] = rd_strndup(topic_name,
+									 strlen(topic_name));
+			streams_topic_count++;
+		} else {
+			kafka_topic_count++;
+		}
+
+		if (streams_topic_count!=0 && kafka_topic_count!=0)
+			//Both streams and kafka topic names provided
+			*tcount = streams_topic_count;
+			return -1;
+	}
+
+	if (streams_topic_count > 0 )
+		return 0;
+	else if(kafka_topic_count > 0 )
+		return 1;
+	else
+		return -1;
+}
+
+void streams_topic_partition_free (streams_topic_partition_t *tps,
+				   int num_topics) {
+	int i;
+	for (i=0; i< num_topics; i++)
+		streams_topic_partition_destroy(tps[i]);
+
+	rd_free(tps);
+}
+
+int streams_get_topic_commit_info (rd_kafka_t *rk,
+				   const rd_kafka_topic_partition_list_t *topics,
+				   streams_topic_partition_t *tp,
+				   int64_t *cursor,
+				   uint32_t *tp_size ) {
+
+	int streams_topic_count = 0;
+	int kafka_topic_count = 0;
+	int i;
+	*tp_size = (uint32_t) topics->cnt;
+
+	for (i=0; i < topics->cnt; i++) {
+		const char *topic_name = (topics->elems[i]).topic;
+		if (streams_is_valid_topic_name(topic_name)) {
+			streams_topic_partition_create (topic_name,
+							(topics->elems[i]).partition,
+							 &tp[streams_topic_count]);
+			cursor[streams_topic_count] = (topics->elems[i]).offset;
+			streams_topic_count++;
+
+		} else {
+			kafka_topic_count++;
+		}
+
+		if (streams_topic_count!=0 && kafka_topic_count!=0) {
+			*tp_size = (uint32_t) streams_topic_count;
+			return -1;
+		}
+	}
+
+	if (streams_topic_count > 0 ) {
+		*tp_size = (uint32_t) streams_topic_count;
+		return 0;
+	} else if (kafka_topic_count > 0 ) {
+		return 1;
+	} else {
+                return -1;
+        }
+}
+
+void streams_populate_topic_partition_list(rd_kafka_t *rk,
+					   streams_topic_partition_t *topic_partitions,
+					   const int64_t *offsets,
+					   uint32_t topic_partition_size,
+					   rd_kafka_topic_partition_list_t *outList ) {
+        uint32_t i = 0;
+        for (i=0; i< topic_partition_size; i++) {
+	        char *topic_name;
+	        streams_topic_partition_get_topic_name (topic_partitions[i],
+							&topic_name);
+	        int32_t partition_id = 0;
+	        streams_topic_partition_get_partition_id(topic_partitions[i],
+							 &partition_id);
+		rd_kafka_topic_partition_t *rkt = rd_kafka_topic_partition_list_add (outList,
+										     topic_name,
+										     partition_id);
+
+		if (offsets != NULL)
+			rkt->offset = offsets[i];
+	}
+}
+
+int streams_consumer_committed_wrapper (rd_kafka_t *rk,
+					rd_kafka_topic_partition_list_t *topics) {
+	int streams_topic_count = 0;
+	int kafka_topic_count = 0;
+	int i;
+
+	for (i=0; i < topics->cnt; i++) {
+		const char *topic_name =  (topics->elems[i]).topic;
+		if (streams_is_valid_topic_name(topic_name)) {
+
+			streams_topic_partition_t tp;
+			streams_topic_partition_create(topic_name, (topics->elems[i]).partition, &tp);
+			int64_t offset = 0;
+			streams_consumer_committed (rk->streams_consumer, tp, &offset);
+			(topics->elems[i]).offset = offset;
+
+			streams_topic_partition_destroy(tp);
+			streams_topic_count++;
+		} else {
+			kafka_topic_count++;
+		}
+
+		if (streams_topic_count!=0 && kafka_topic_count!=0)
+			return -1;
+	}
+
+	if (streams_topic_count > 0 )
+		return 0;
+	else if (kafka_topic_count > 0 )
+		return 1;
+        else
+		return -1;
+}

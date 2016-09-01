@@ -321,6 +321,10 @@ struct rd_kafka_queue_s {
         rd_kafka_t  *rkqu_rk;
 };
 
+rd_kafka_op_t *streams_rd_kafka_q_pop_wrapper (rd_kafka_t *rk,
+					       rd_kafka_q_t *rkq,
+					       int timeout_ms,
+					       int32_t version);
 
 
 extern int RD_TLS rd_kafka_yield_thread;

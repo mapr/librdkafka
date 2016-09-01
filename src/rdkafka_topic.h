@@ -144,4 +144,28 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
-bool streams_is_valid_topic_name (const char *topic_name);
+bool streams_is_valid_topic_name (const char * topic_name);
+
+int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
+			     char ** streams_topics,
+					 int *tcount);
+
+int streams_get_topic_commit_info (rd_kafka_t *rk,
+				   const rd_kafka_topic_partition_list_t *topics,
+				   streams_topic_partition_t *tp,
+				   int64_t *cursor,
+				   uint32_t *tp_size );
+
+void streams_topic_partition_free (streams_topic_partition_t *tps,
+				   int num_topics);
+
+void streams_topic_free (char **streams_topics,
+		       int num_topics);
+void streams_populate_topic_partition_list (rd_kafka_t *rk,
+					    streams_topic_partition_t *topic_partitions,
+					    const int64_t *offsets,
+					    uint32_t topic_partition_size,
+					    rd_kafka_topic_partition_list_t *outList ) ;
+
+int streams_consumer_committed_wrapper (rd_kafka_t *rk,
+		                        rd_kafka_topic_partition_list_t *topics);

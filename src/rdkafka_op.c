@@ -88,6 +88,20 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 	return rko;
 }
 
+void streams_rd_kafka_op_destroy_wrapper(rd_kafka_op_t *rko){
+
+	if (rko->rko_payload && rko->rko_flags & RD_KAFKA_OP_F_FREE) {
+                if (rko->rko_free_cb)
+                        rko->rko_free_cb(rko->rko_payload);
+                else
+                      if (rko->rko_payload)
+			      rd_free(rko->rko_payload);
+        }
+	rd_free (rko);
+}
+
+
+
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
@@ -135,7 +149,7 @@ void rd_kafka_op_app_reply (rd_kafka_q_t *rkq,
                             void *payload, size_t len) {
 	rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new(type);
+	rko = rd_kafka_op_new(type);
 
 	if (err && !payload) {
 		/* Provide human readable error string if not provided. */
@@ -229,20 +243,21 @@ void rd_kafka_op_app (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
                       void (*free_cb) (void *)) {
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new(type);
-        if (rktp) {
+	rko = rd_kafka_op_new(type);
+
+	if (rktp) {
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
                 rko->rko_version = rktp->rktp_fetch_version;
                 rko->rko_rkmessage.partition = rktp->rktp_partition;
         }
 
-        rko->rko_err     = err;
+	rko->rko_err     = err;
         rko->rko_payload = payload;
         rko->rko_len     = len;
         rko->rko_flags  |= op_flags;
         rko->rko_free_cb = free_cb;
 
-        rd_kafka_q_enq(rkq, rko);
+	rd_kafka_q_enq(rkq, rko);
 }
 
 

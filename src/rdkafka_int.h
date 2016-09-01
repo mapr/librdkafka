@@ -149,6 +149,8 @@ struct rd_kafka_s {
 
 	streams_consumer_t streams_consumer;
 	streams_producer_t streams_producer;
+	streams_consumer_record_t *streams_consumer_records;
+	uint32_t streams_consumer_records_count;
 
 	char             rk_name[128];
 	rd_kafkap_str_t *rk_clientid;

@@ -1,6 +1,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_topic.h"
+#include "streams_wrapper.h"
 
 int RD_TLS rd_kafka_yield_thread = 0;
 
@@ -114,11 +115,17 @@ int rd_kafka_q_purge0 (rd_kafka_q_t *rkq, int do_lock) {
                 mtx_unlock(&rkq->rkq_lock);
 
 	/* Destroy the ops */
+	bool is_streams_pc = is_streams_producer(rkq->rkq_rk) || is_streams_consumer (rkq->rkq_rk);
 	next = TAILQ_FIRST(&tmpq);
 	while ((rko = next)) {
 		next = TAILQ_NEXT(next, rko_link);
-		rd_kafka_op_destroy(rko);
-                cnt++;
+
+		if (is_streams_pc)
+			streams_rd_kafka_op_destroy_wrapper(rko);
+		else
+			rd_kafka_op_destroy(rko);
+
+		cnt++;
 	}
 
         return cnt;
@@ -242,6 +249,136 @@ static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
         return rko;
 }
 
+void  streams_populate_consumer_message (rd_kafka_t *rk,
+					 rd_kafka_q_t *rkq,
+					 streams_consumer_record_t record,
+					 int32_t ver) {
+	streams_topic_partition_t tp;
+	streams_consumer_record_get_topic_partition (record,
+						     &tp);
+	char *topic_name;
+	streams_topic_partition_get_topic_name (tp,
+						&topic_name);
+	int32_t partitionId = 0;
+	streams_topic_partition_get_partition_id (tp,
+						  &partitionId);
+	uint32_t numMsgs = 0;
+	streams_consumer_record_get_message_count (record,
+						   &numMsgs);
+
+	//Create basic topic object to be filled in rd_kafka_message_t
+	shptr_rd_kafka_itopic_t *s_rkt;
+	rd_kafka_topic_t *rkt;
+	rd_kafka_wrlock (rk);
+	/* Find or create topic */
+	if (unlikely(!(s_rkt = rd_kafka_topic_find(rk,
+						   topic_name,
+						   0/*no-lock*/)))) {
+		s_rkt = rd_kafka_topic_new0(rk,
+					    topic_name,
+					    NULL,
+					    NULL,
+					    0/*no-lock*/);
+		if (!s_rkt) {
+			rd_kafka_wrunlock(rk);
+			rkt = NULL;
+		}
+	}
+
+	rd_kafka_wrunlock (rk);
+        rkt = rd_kafka_topic_s2a(s_rkt);
+
+	uint32_t j = 0;
+	for (j=0; j < numMsgs; j++) {
+
+		rd_kafka_message_t *rkm = rd_kafka_message_new();
+		rd_kafka_op_t *rko;
+		void *key, *payload;
+                rko = rd_kafka_op_new (RD_KAFKA_OP_FETCH);
+		uint32_t key_len = 0;
+		uint32_t val_len = 0;
+
+		streams_msg_get_key (record,
+				     j,
+				     &(key),
+				     &key_len);
+		streams_msg_get_value (record,
+				       j,
+				       &(payload),
+				       &val_len);
+		streams_msg_get_offset (record,
+				        j,
+				        &(rkm->offset));
+		streams_msg_get_timestamp (record,
+					   j,
+					   &(rko->rko_timestamp));
+
+		rkm->len = val_len;
+		rkm->key_len = key_len;
+		rkm->key = rd_malloc(rkm->key_len +1);
+		rkm->payload = rd_malloc(rkm->len +1);
+		if (rkm->key_len >0) {
+			strncpy ((char*)rkm->key,(char *) key, rkm->key_len);
+			((char *)rkm->key)[rkm->key_len] = '\0';
+		} else {
+			rkm->key = key;
+		}
+		if (payload) {
+			strncpy ((char *)rkm->payload,(char *) payload, rkm->len);
+			((char *)rkm->payload)[rkm->len] = '\0';
+			rkm->rkt = rkt;
+			rkm->partition = partitionId;
+			rkm->is_streams_message = true;
+			rko->rko_rkmessage = *rkm;
+			rko->rko_err = rkm->err;
+			rko->rko_rkt = rkm->rkt;
+			rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+			rko->rko_version = ver;
+			rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
+		}
+	}
+}
+
+rd_kafka_op_t *streams_rd_kafka_q_pop_wrapper (rd_kafka_t *rk,
+					       rd_kafka_q_t *rkq,
+					       int timeout_ms,
+					       int32_t version) {
+
+	if (is_streams_consumer(rk) && (rkq->rkq_qlen == 0)) {
+		if (rk->streams_consumer_records != NULL) {
+			uint32_t k;
+			for (k = 0; k < rk->streams_consumer_records_count; k++) {
+				streams_consumer_record_destroy(rk->streams_consumer_records[k]);
+			}
+			rk->streams_consumer_records = NULL;
+		}
+
+		streams_consumer_record_t *record;
+		uint32_t numRecords = 0;
+		streams_consumer_poll (rk->streams_consumer,
+				       (uint64_t) timeout_ms,
+				       &record,
+				       &numRecords);
+		rk->streams_consumer_records = record;
+		rk->streams_consumer_records_count = numRecords;
+		if (numRecords != 0) {
+			uint32_t i;
+			for (i = 0; i< numRecords; i++) {
+				if (record[i]!= NULL) {
+					streams_populate_consumer_message (rk,
+									   rkq,
+									   record[i],
+									   version);
+				}
+			}
+		}
+	}
+	rd_kafka_op_t *rdko = rd_kafka_q_pop (rkq,
+					      timeout_ms,
+					      version);
+	return rdko;
+}
+
 
 
 /**
@@ -267,7 +404,7 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
 
                         if (rko) {
                                 /* Proper versioned op */
-                                rd_kafka_q_deq0(rkq, rko);
+				rd_kafka_q_deq0(rkq, rko);
                                 break;
                         }
 
@@ -372,7 +509,11 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
 		handled += callback(rk, rko, cb_type, opaque);
 		rd_kafka_q_deq0(&localq, rko);
-		rd_kafka_op_destroy(rko);
+		if ((rko->rko_type == RD_KAFKA_OP_DR) && (is_streams_producer(rk)))
+			streams_rd_kafka_op_destroy_wrapper(rko);
+		else
+			rd_kafka_op_destroy(rko);
+
                 cnt++;
 
                 if (unlikely(rd_kafka_yield_thread)) {
@@ -400,15 +541,23 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 	rd_kafka_op_t *rko;
 
 	if (likely((rko = (rd_kafka_op_t *)rkmessage->_private) != NULL))
-		rd_kafka_op_destroy(rko);
+	{
+		if (rkmessage->is_streams_message)
+			streams_rd_kafka_op_destroy_wrapper(rko);
+		else
+			rd_kafka_op_destroy(rko);
+	}
 	else
+	{
 		rd_free(rkmessage);
+	}
 }
 
 
 rd_kafka_message_t *rd_kafka_message_new (void) {
         rd_kafka_message_t *rkmessage;
         rkmessage = rd_calloc(1, sizeof(*rkmessage));
+	rkmessage->is_streams_message = false;
         return rkmessage;
 }
 
@@ -424,8 +573,9 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 				rd_kafka_topic_keep_a(
 					rd_kafka_toppar_s2i(rko->rko_rktp)->
 					rktp_rkt);
-	} else
-                rkmessage = rd_kafka_message_new();
+	} else {
+		rkmessage = rd_kafka_message_new();
+	}
 
 	return rkmessage;
 }

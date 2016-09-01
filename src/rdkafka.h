@@ -682,6 +682,7 @@ typedef struct rd_kafka_message_s {
 				    *  - rdkafka private pointer: DO NOT MODIFY
 				    *  - dr_msg_cb:
                                     *    msg_opaque from produce() call */
+	bool is_streams_message;
 } rd_kafka_message_t;
 
 

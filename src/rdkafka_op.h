@@ -218,4 +218,6 @@ void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,
 				int throttle_time);
 
+void streams_rd_kafka_op_destroy_wrapper (rd_kafka_op_t *rko);
+
 extern rd_atomic32_t rd_kafka_op_cnt;

@@ -35,6 +35,7 @@
 
 #include "rdkafka_int.h"
 #include "rdkafka_subscription.h"
+#include "streams_wrapper.h"
 
 
 /**
@@ -65,33 +66,181 @@ rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt) {
 
 
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {
-        rd_kafka_cgrp_t *rkcg;
 
-        if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+	if (is_streams_consumer(rk)) {
+		return streams_consumer_unsubscribe((const streams_consumer_t) rk->streams_consumer);
+	} else {
+		rd_kafka_cgrp_t *rkcg;
 
-        return rd_kafka_op_err_destroy(rd_kafka_op_req2(&rkcg->rkcg_ops,
-                                                        RD_KAFKA_OP_SUBSCRIBE));
+		if (!(rkcg = rd_kafka_cgrp_get(rk)))
+			return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+
+	        return rd_kafka_op_err_destroy(rd_kafka_op_req2(&rkcg->rkcg_ops,
+                                               RD_KAFKA_OP_SUBSCRIBE));
+	}
 }
 
+static void streams_assign_rebalance_wrapper_cb ( streams_topic_partition_t *topic_partitions,
+						  uint32_t topic_partition_size,
+						  void *ctx) {
+
+	streams_consumer_callback_ctx *wrapper_cb_ctx = (streams_consumer_callback_ctx *) ctx;
+	rd_kafka_t *rk = wrapper_cb_ctx->rk;
+
+	if (rk->rk_conf.rebalance_cb && topic_partition_size >0) {
+		rd_kafka_topic_partition_list_t *assigned_tp_list = rd_kafka_topic_partition_list_new(1);
+		streams_populate_topic_partition_list(rk,
+						      topic_partitions,
+						      NULL,
+						      topic_partition_size,
+						      assigned_tp_list);
+
+		int err = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+		rd_kafka_op_app(&(rk->rk_cgrp->rkcg_q),
+				RD_KAFKA_OP_REBALANCE,
+				RD_KAFKA_OP_F_FREE,
+				NULL, err,
+				rd_kafka_topic_partition_list_copy(assigned_tp_list),
+				0,
+				(void *)rd_kafka_topic_partition_list_destroy);
+
+		rd_kafka_topic_partition_list_destroy(assigned_tp_list);
+	}
+	//TODO: DO NOT DESTROY WRAPPER CTX here, same context is used till the end of life of consumer.
+};
+
+static void streams_revoke_rebalance_wrapper_cb ( streams_topic_partition_t *topic_partitions,
+						  uint32_t topic_partition_size,
+						  void *ctx) {
+
+	streams_consumer_callback_ctx *wrapper_cb_ctx = (streams_consumer_callback_ctx *) ctx;
+	rd_kafka_t *rk = wrapper_cb_ctx->rk;
+
+	if (rk->rk_conf.rebalance_cb && topic_partition_size > 0) {
+		rd_kafka_topic_partition_list_t *revoked_tp_list = rd_kafka_topic_partition_list_new(1);
+		streams_populate_topic_partition_list(rk,
+						      topic_partitions,
+						      NULL,
+						      topic_partition_size,
+						      revoked_tp_list);
+
+		int err = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+		rd_kafka_op_app (&(rk->rk_cgrp->rkcg_q),
+				RD_KAFKA_OP_REBALANCE,
+				RD_KAFKA_OP_F_FREE,
+				NULL, err,
+				rd_kafka_topic_partition_list_copy(revoked_tp_list),
+				0,
+				(void *)rd_kafka_topic_partition_list_destroy);
+
+		rd_kafka_topic_partition_list_destroy(revoked_tp_list);
+	}
+	//TODO: DO NOT DESTROY WRAPPER CTX here, same context is used till the end of life of consumer.
+};
+
+void streams_consumer_create_wrapper(rd_kafka_t *rk) {
+	//create streams config
+	streams_config_t config;
+	streams_config_create(&config);
+
+	char *group_id = (rk->rk_conf).group_id->str;
+	if (group_id == NULL) {
+		//TODO: return relevant error and abort
+		group_id = "default";
+	}
+
+	streams_config_set(config, "group.id", group_id);
+	//TODO: Set correct conf for auto.offset.reset
+	streams_config_set(config, "auto.offset.reset", "earliest");
+
+	//create streams consumer
+	streams_consumer_t consumer;
+	streams_consumer_create(config, &consumer);
+
+	//update corresponding rd_kafka_new object
+	rk->streams_consumer = consumer;
+}
+
+rd_kafka_resp_err_t
+streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
+																		const rd_kafka_topic_partition_list_t *topics,
+																		bool *is_kafka_subscribe) {
+	is_kafka_subscribe = false;
+	char **streams_topics = rd_malloc(topics->cnt * sizeof(char*));  // TODO: free streams_topics should this be saved under rk->cgrp->assignment/subscriptions ?
+	int tcount = topics->cnt;
+	int topic_validity = streams_get_topic_names(topics,
+																		streams_topics,
+																							&tcount);  // TODO: Regex topics
+
+	switch (topic_validity) {
+
+	case -1:
+		streams_topic_free(streams_topics, tcount);
+		return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;	// TODO: return proper error code
+
+	case 0:
+		//all streams topics
+		if(!is_streams_consumer(rk)) {
+			streams_consumer_create_wrapper (rk);
+		}
+
+		streams_consumer_callback_ctx *opaque_wrapper;
+		size_t ctxlen = sizeof(*opaque_wrapper);
+		opaque_wrapper = rd_malloc(ctxlen);
+		opaque_wrapper->rk = rk;
+		opaque_wrapper->partitions = rd_kafka_topic_partition_list_copy (topics);
+
+		streams_consumer_subscribe_topics((const streams_consumer_t) rk->streams_consumer,
+						  (const char**) streams_topics,
+						  topics->cnt,
+						  (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
+						  (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
+						  (void *)opaque_wrapper);
+
+		break;
+
+	case 1:
+		//all kafka topics
+		if (is_streams_consumer(rk))
+			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+		else
+			*is_kafka_subscribe = true;
+		streams_topic_free(streams_topics, tcount);
+		break;
+
+	default:
+		streams_topic_free(streams_topics, tcount);
+		rd_dassert (topic_validity >1 || topic_validity < -1);
+		break;
+	}
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
-                    const rd_kafka_topic_partition_list_t *topics) {
+		    const rd_kafka_topic_partition_list_t *topics) {
 
-        rd_kafka_op_t *rko;
-        rd_kafka_cgrp_t *rkcg;
+	rd_kafka_resp_err_t err;
+	bool is_kafka_subscribe = false;
+	err = streams_rd_kafka_subscribe_wrapper (rk, topics, &is_kafka_subscribe);
 
-        if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+	if (is_kafka_subscribe) {
+			rd_kafka_op_t *rko;
+			rd_kafka_cgrp_t *rkcg;
 
-        rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
-        rd_kafka_op_payload_set(rko,
-                                rd_kafka_topic_partition_list_copy(topics),
-                                (void *)rd_kafka_topic_partition_list_destroy);
+			if (!(rkcg = rd_kafka_cgrp_get(rk)))
+				return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        return rd_kafka_op_err_destroy(
-                rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+			rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
+			rd_kafka_op_payload_set(rko,
+															rd_kafka_topic_partition_list_copy(topics),
+															(void *)rd_kafka_topic_partition_list_destroy);
+
+			err = rd_kafka_op_err_destroy(
+							rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+		}
+	return err;
 }
 
 

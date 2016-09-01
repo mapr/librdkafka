@@ -53,7 +53,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_broker.h"
-
+#include "streams_wrapper.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <fcntl.h>
@@ -509,32 +509,161 @@ rd_kafka_commit0 (rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+static void streams_offset_commit_wrapper_cb (int32_t err,
+					      streams_topic_partition_t *tps,
+					      int64_t *offsets,
+					      uint32_t nFeeds,
+					      void *ctx) {
+	streams_offset_commit_callback_ctx *wrapper_cb_ctx = (streams_offset_commit_callback_ctx *) ctx;
+	rd_kafka_t *rk = wrapper_cb_ctx->rk;
+
+	if (rk->rk_conf.offset_commit_cb || err) {
+		rd_kafka_op_t *rko;
+		rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY);
+		rko->rko_err = err;
+		rd_kafka_topic_partition_list_t *tp_list = rd_kafka_topic_partition_list_new(1);
+		streams_populate_topic_partition_list (rk,
+							tps,
+							offsets,
+							nFeeds,
+							tp_list);
+		if (offsets)
+			rd_kafka_op_payload_set (rko,
+						 tp_list,
+						 (void *)rd_kafka_topic_partition_list_destroy);
+		rd_kafka_q_enq(&rk->rk_rep, rko);
+	}
+	rd_kafka_topic_partition_list_destroy(wrapper_cb_ctx->offsets);
+	rd_free (wrapper_cb_ctx);
+};
+
+rd_kafka_resp_err_t
+streams_commit_topics (rd_kafka_t *rk,
+		       const rd_kafka_topic_partition_list_t *offsets,
+		       streams_topic_partition_t* streams_topics,
+		       int64_t* cursor,
+		       uint32_t tp_size,
+		       int async) {
+	streams_offset_commit_callback_ctx *opaque_wrapper;
+	size_t ctxlen = sizeof(opaque_wrapper);
+	opaque_wrapper = rd_malloc(ctxlen);
+	opaque_wrapper->rk = rk;
+	opaque_wrapper->offsets = rd_kafka_topic_partition_list_copy (offsets);
+	rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+ 	if (async) {
+		streams_consumer_commit_async ((const streams_consumer_t) rk->streams_consumer,
+						(const streams_topic_partition_t*) streams_topics,
+						(const int64_t*) cursor,
+						tp_size,
+						(const streams_commit_cb) streams_offset_commit_wrapper_cb,
+						(void *) opaque_wrapper);
+	} else {
+		streams_consumer_commit_sync ((const streams_consumer_t) rk->streams_consumer,
+					      (const streams_topic_partition_t*) streams_topics,
+					      (const int64_t*) cursor,
+					      tp_size);
+
+		streams_offset_commit_wrapper_cb ((int32_t)RD_KAFKA_RESP_ERR_NO_ERROR,
+						   streams_topics,
+						   cursor,
+						   tp_size,
+						   opaque_wrapper);
+	}
+	return err;
+}
+
+rd_kafka_resp_err_t
+streams_rd_kafka_commit_wrapper (rd_kafka_t *rk,
+																const rd_kafka_topic_partition_list_t *offsets,
+																int async,
+																bool *is_kafka_commit) {
+	is_kafka_commit = false;
+	if (offsets == NULL) {
+		if (is_streams_consumer(rk)) {
+			streams_consumer_commit_all_sync((const streams_consumer_t) rk->streams_consumer);
+			return RD_KAFKA_RESP_ERR_NO_ERROR;
+		} else {
+			*is_kafka_commit = true;
+		}
+	}
+
+	if (!(*is_kafka_commit)) {
+		streams_topic_partition_t *streams_topics =
+		rd_malloc (offsets->cnt * sizeof(streams_topic_partition_t));  // TODO: free streams_topics should this be saved under rk->cgrp->assignment/subscriptions ?
+		int64_t *cursor = rd_malloc (offsets->cnt * sizeof(int64_t));
+		uint32_t tp_size = 0;
+		int topic_validity = streams_get_topic_commit_info (rk,
+								    offsets,
+								    streams_topics,
+								    cursor,
+								    &tp_size);  // TODO: Regex topics
+
+		switch (topic_validity) {
+
+		case -1:
+			streams_topic_partition_free (streams_topics, tp_size);
+			rd_free(cursor);
+			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;        // TODO: return proper error code
+
+		case 0:
+			if (is_streams_consumer(rk))
+				streams_commit_topics (rk->streams_consumer,
+						       offsets,
+						       streams_topics,
+						       cursor,
+						       tp_size,
+						       async);
+			else
+				return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+
+		case 1:
+				*is_kafka_commit = true;
+				streams_topic_partition_free (streams_topics, tp_size);
+				rd_free(cursor);
+				break;
+
+		default:
+			streams_topic_partition_free (streams_topics, tp_size);
+			rd_free(cursor);
+			rd_dassert(topic_validity > 1 || topic_validity < -1);
+		}
+	}
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 /**
  * NOTE: 'offsets' may be NULL, see official documentation.
  */
 rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk,
-                 const rd_kafka_topic_partition_list_t *offsets, int async) {
-        rd_kafka_cgrp_t *rkcg;
+                 const rd_kafka_topic_partition_list_t *offsets,
+								 int async) {
+  rd_kafka_cgrp_t *rkcg;
 	rd_kafka_resp_err_t err;
 	rd_kafka_q_t *tmpq = NULL;
+	bool is_kafka_commit = false;
 
-        if (!(rkcg = rd_kafka_cgrp_get(rk)))
+	if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        if (!async)
-                tmpq = rd_kafka_q_new(rk);
+	err = streams_rd_kafka_commit_wrapper (rk,
+																				offsets,
+																				async,
+																				&is_kafka_commit);
+	if (is_kafka_commit) {
 
-        err = rd_kafka_commit0(rk, offsets, async ? NULL : tmpq, NULL);
+		if (!async)
+			tmpq = rd_kafka_q_new(rk);
 
-        if (!async) {
-		err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
-                rd_kafka_q_destroy(tmpq);
-        } else {
-                err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        }
+		err = rd_kafka_commit0(rk, offsets, async ? NULL : tmpq, NULL);
 
+		if (!async) {
+			err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
+			rd_kafka_q_destroy(tmpq);
+		} else {
+			err = RD_KAFKA_RESP_ERR_NO_ERROR;
+		}
+	}
 	return err;
 }
 
