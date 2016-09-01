@@ -38,7 +38,7 @@
 #include "rdsysqueue.h"
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
-	if(!is_streams_producer(rk)) {
+	if (!is_streams_producer(rk)) {
 		rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
 		(void)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
 	}
@@ -111,12 +111,13 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 		/* Copy payload to space following the ..msg_t */
 		rkm->rkm_payload = (void *)(rkm+1);
 		memcpy(rkm->rkm_payload, payload, len);
+
 	} else {
 		/* Just point to the provided payload. */
 		rkm->rkm_payload = payload;
 	}
-	
-        return rkm;
+
+	return rkm;
 }
 
 
@@ -483,30 +484,31 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 	return 0;
 }
 
-int streams_message_create (rd_kafka_itopic_t *rkt, 
-		int32_t force_partition, 
-		int msgflags, 
-		char *payload, 
-		size_t len, 
-		const void *key,
-	       	size_t keylen, 
-		void *msg_opaque, 
-		rd_kafka_resp_err_t err, 
-		rd_kafka_msg_t **rkm) {
+int streams_message_create (rd_kafka_itopic_t *rkt,
+			    int32_t force_partition,
+			    int msgflags,
+			    char *payload,
+			    size_t len,
+			    const void *key,
+			    size_t keylen,
+			    void *msg_opaque,
+			    rd_kafka_resp_err_t err,
+			    rd_kafka_msg_t **rkm) {
+
 	int errnox = 0;
-	*rkm = rd_kafka_msg_new0(rkt, 
-			force_partition, 
-			msgflags, 
-			payload, 
-			len, 
-			key, 
-			keylen, 
-			msg_opaque, 
-			&err, 
-			&errnox, 
-			rd_uclock(), 
-			rd_clock());  
-	    
+	*rkm = rd_kafka_msg_new0(rkt,
+				force_partition,
+				msgflags,
+				payload,
+				len,
+				key,
+				keylen,
+				msg_opaque,
+				&err,
+				&errnox,
+				rd_uclock(),
+				rd_clock());
+
 	if (unlikely(!*rkm)) {
 		rd_kafka_set_last_error(err, errnox);
 		return -1;

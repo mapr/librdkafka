@@ -28,6 +28,7 @@
 
 #pragma once
 
+
 #ifndef _MSC_VER
 #define _GNU_SOURCE  /* for strndup() */
 #include <syslog.h>
@@ -204,8 +205,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk);
 int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 bool is_streams_consumer (rd_kafka_t *rk);
 bool is_streams_producer (rd_kafka_t *rk);
-bool is_streams_consumer_or_producer (rd_kafka_t *rk);
- 
+
+
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 
@@ -299,3 +300,4 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                       int cb_type, void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
+
