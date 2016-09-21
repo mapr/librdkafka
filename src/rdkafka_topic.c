@@ -986,10 +986,11 @@ int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 			kafka_topic_count++;
 		}
 
-		if (streams_topic_count!=0 && kafka_topic_count!=0)
+		if (streams_topic_count!=0 && kafka_topic_count!=0) {
 			//Both streams and kafka topic names provided
 			*tcount = streams_topic_count;
 			return -1;
+		}
 	}
 
 	if (streams_topic_count > 0 )
