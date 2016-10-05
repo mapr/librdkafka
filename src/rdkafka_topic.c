@@ -54,7 +54,7 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 	rd_kafka_assert(rkt->rkt_rk, rd_refcnt_get(&rkt->rkt_refcnt) == 0);
 
 	if (rkt->rkt_topic)
-		rd_kafkap_str_destroy(rkt->rkt_topic);
+	  rd_kafkap_str_destroy(rkt->rkt_topic);
 
         rd_kafka_assert(rkt->rkt_rk, rd_list_empty(&rkt->rkt_desp));
         rd_list_destroy(&rkt->rkt_desp, NULL);
@@ -958,7 +958,9 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
 }
 
 bool streams_is_valid_topic_name (const char * topic_name) {
-	return streams_is_full_path_valid(topic_name, NULL/*isRegex*/);
+  if(!topic_name)
+    return false;
+  return streams_is_full_path_valid(topic_name, NULL/*isRegex*/);
 }
 
 void streams_topic_free (char **streams_topics,

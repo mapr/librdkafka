@@ -1034,7 +1034,7 @@ static void rd_kafka_global_init (void) {
 
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
-	rd_kafka_t *rk;
+  rd_kafka_t *rk;
 	static rd_atomic32_t rkid;
 #ifndef _MSC_VER
         sigset_t newset, oldset;
@@ -1085,6 +1085,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
+	rk->kafka_producer = false;
+	rk->kafka_consumer = false;
 	/* Initiate Streams components */
 	rk->streams_consumer = NULL;
 	rk->streams_producer = NULL;
@@ -1228,7 +1230,8 @@ static void streams_producer_wrapper_cb (int32_t err,
 					int partitionid,
 					int64_t offset,
 					void *ctx) {
-	streams_producer_callback_ctx *wrapper_cb_ctx = (streams_producer_callback_ctx *) ctx;
+	streams_producer_callback_ctx *wrapper_cb_ctx =
+                                (streams_producer_callback_ctx *) ctx;
 	rd_kafka_t *rk = wrapper_cb_ctx->rk;
 
 	//check for configured callback for message produced.
@@ -1299,27 +1302,30 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
 				  void *payload,
 				  size_t len,
 				  void *msg_opaque) {
+  if(irkt==NULL || irkt->rkt_topic == NULL || irkt->rkt_topic->str == NULL)
+    return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 	//Create streams producer record
-	streams_topic_partition_t tp;
-	streams_topic_partition_create(irkt->rkt_topic->str,
+	streams_topic_partition_t tp; 
+  streams_topic_partition_create(irkt->rkt_topic->str,
 				       partition,
 				       &tp);
 
-	void *copyPayload;
-	//Copy payload
-	if (payload && msgflags & RD_KAFKA_MSG_F_COPY) {
-	/* Copy payload to space following the ..msg_t */
-	 memcpy(copyPayload, payload, len);
-	} else {
-	/* Just point to the provided payload. */
-	copyPayload = payload;
-	}
+  char *copyPayload;
+  //Copy payload
+  if (payload && (msgflags & RD_KAFKA_MSG_F_COPY)) {
+    /* Copy payload to space following the ..msg_t */
+    copyPayload =  malloc (sizeof (char) * len);
+    memcpy(copyPayload, payload, len);
+  } else {
+    /* Just point to the provided payload. */
+    copyPayload = payload;
+  }
 
 	streams_producer_record_t record;
 	streams_producer_record_create(tp,
 				       key,
 				       keylen,
-				       copyPayload,
+				       (void *)copyPayload,
 				       len,
 				       &record);
 
@@ -1333,7 +1339,8 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
 	opaque_wrapper->topic = irkt->rkt_app_rkt;
 	opaque_wrapper->msgflags = msgflags;
 
-	int result = streams_producer_send ((const streams_producer_t) irkt->rkt_rk->streams_producer,
+	int result = streams_producer_send ((const streams_producer_t) 
+					    irkt->rkt_rk->streams_producer,
 					    (const streams_producer_record_t) record,
 					    (const streams_producer_cb) streams_producer_wrapper_cb,
 					    opaque_wrapper);
@@ -1353,10 +1360,17 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		      size_t keylen,
 		      void *msg_opaque) {
 	rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
+	if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL)
+		return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+
 	if (streams_is_valid_topic_name(itopic->rkt_topic->str)) {
+		partition = INVALID_PARTITION_ID;
+		if(itopic->rkt_rk->kafka_producer)
+			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+
 		if (!is_streams_producer(itopic->rkt_rk))
-			streams_producer_create_wrapper(itopic->rkt_rk);
-		/*
+      streams_producer_create_wrapper(itopic->rkt_rk);
+     /*
 		 * TODO: Support partitioner callback.
 		 */
 		if (partition == RD_KAFKA_PARTITION_UA)
@@ -1372,7 +1386,10 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 						     len,
 						     msg_opaque );
 	} else {
-		//Producing to Kafka
+		if (is_streams_producer(itopic->rkt_rk))
+			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+		//producing to kafka
+		itopic->rkt_rk->kafka_producer = true;
 		return rd_kafka_msg_new(itopic,
 					partition,
 					msgflags,

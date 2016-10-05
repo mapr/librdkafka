@@ -147,6 +147,8 @@ struct rd_kafka_s {
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
+  bool kafka_producer;
+  bool kafka_consumer;
 	streams_consumer_t streams_consumer;
 	streams_producer_t streams_producer;
 	streams_consumer_record_t *streams_consumer_records;
