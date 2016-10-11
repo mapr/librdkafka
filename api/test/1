@@ -165,8 +165,8 @@ int ProducerTest::runProducerErrorTest(char * strName, int numMsgs,
       if(nmsgs % deleteCount == 0) {
         if (streamDelete)
           stream_delete(strName , 1);
-        //else
-          //TODO:Delete streams topic instead of rd_kafka_topic_destroy(topic);
+     //   else
+       //   rd_kafka_topic_destroy(topic);
       }
       sprintf(value, "value:%d", nmsgs);
       err = rd_kafka_produce (topic,

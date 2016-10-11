@@ -263,9 +263,14 @@ TEST(ProducerTest, DISABLED_msgProduceStreamDeleteTest) {
             ProducerTest::runProducerErrorTest(STREAM, 10000, true));
 }
 
-TEST(ProducerTest, DISABLED_msgProduceTopicDeleteTest) {
+TEST(ProducerTest, msgProduceTopicDeleteTest) {
   ASSERT_EQ(SUCCESS, stream_create(STREAM, 1/*# of streams*/,
                                    1/*# of partitions*/));
+ char command[1000];
+ int res= 0;
+ memset(command, 0, 1000);
+ sprintf(command, "maprcli stream topic delete -path /gtest-ProducerTest0 -topic topic 2>/dev/null ");
+ system(command); 
   ASSERT_EQ (RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
             ProducerTest::runProducerErrorTest(STREAM, 10000, false));
   EXPECT_EQ (SUCCESS, stream_delete(STREAM, 1));
