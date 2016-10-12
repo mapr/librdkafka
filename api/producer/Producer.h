@@ -30,12 +30,12 @@ class Producer {
     /*Constructor*/
     Producer ();
     Producer (char* s, int nstreams, int ntopics, int npart,
-              int nmsg, int msgSize, bool roundRobin,
+              int nmsg, int msgSize, int flag, bool roundRobin,
               int slowTopics, bool print, uint64_t pollTO);
     ~Producer();
     int run(uint64_t *numCbOut);
     int runTest (char* path, int nStreams, int nTopics, int nParts,
-                 int nMsgs, int msgSize, bool roundRobin, int slowTopics,
+                 int nMsgs, int msgSize, int flag, bool roundRobin, int slowTopics,
                  bool print, uint64_t pollTO, uint64_t *numCbOut);
 };
 
@@ -57,7 +57,7 @@ Producer::Producer () {
   numSlowTopics = 0;
   numPartitions = 4;
   numMsgsPerPartition = 100000;
-  sendflag = 0;
+  sendflag = RD_KAFKA_MSG_F_COPY;
   reportMsgOffset = true; //true calls dr_msg_cb, false calls dr_cb
   MSG_VALUE_LENGTH = 200;
   MSG_KEY_LENGTH = 200;
@@ -67,7 +67,7 @@ Producer::Producer () {
 }
 
 Producer::Producer (char* s, int nstreams, int ntopics, int npart,
-                    int nmsg, int msgSize, bool roundRb, int slowTopics,
+                    int nmsg, int msgSize, int flag, bool roundRb, int slowTopics,
                     bool print, uint64_t timeout) {
   streamName = s;
   numStreams = nstreams;
@@ -75,8 +75,8 @@ Producer::Producer (char* s, int nstreams, int ntopics, int npart,
   numSlowTopics = slowTopics;
   numPartitions = npart;
   numMsgsPerPartition = nmsg;
-  sendflag = 0;
-  reportMsgOffset = false; //true calls dr_msg_cb, false calls dr_cb
+  sendflag = flag;
+  reportMsgOffset = false;
   MSG_VALUE_LENGTH = msgSize;
   MSG_KEY_LENGTH = msgSize;
   roundRobin = roundRb;

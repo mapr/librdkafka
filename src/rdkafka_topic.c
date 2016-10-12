@@ -960,7 +960,10 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
 bool streams_is_valid_topic_name (const char * topic_name) {
   if(!topic_name)
     return false;
-  return streams_is_full_path_valid(topic_name, NULL/*isRegex*/);
+  if(streams_check_full_path_is_valid (topic_name, strlen(topic_name),
+                                        NULL/*isRegex*/) == 0)
+    return true;
+  return false;
 }
 
 void streams_topic_free (char **streams_topics,
@@ -978,7 +981,7 @@ int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 	int streams_topic_count = 0;
 	int kafka_topic_count = 0;
 	int i;
-	for (i=0; i < topics->cnt; i++) {
+  for (i=0; i < topics->cnt; i++) {
 		const char *topic_name =  (topics->elems[i]).topic;
 		if (streams_is_valid_topic_name(topic_name)) {
 			streams_topics[streams_topic_count] = rd_strndup(topic_name,
@@ -995,12 +998,15 @@ int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 		}
 	}
 
-	if (streams_topic_count > 0 )
+	if (streams_topic_count > 0 ) {
 		return 0;
-	else if(kafka_topic_count > 0 )
+	} else if(kafka_topic_count > 0 ) {
+		*tcount = streams_topic_count;
 		return 1;
-	else
+	} else {
+		*tcount = streams_topic_count;
 		return -1;
+	}
 }
 
 void streams_topic_partition_free (streams_topic_partition_t *tps,
@@ -1106,4 +1112,68 @@ int streams_consumer_committed_wrapper (rd_kafka_t *rk,
 		return 1;
         else
 		return -1;
+}
+
+int streams_check_topic_name_is_valid (const char *topicName, uint32_t topicSz,
+                                       bool *isRegex) {
+  if (isRegex) *isRegex = false;
+
+  if (topicSz < 1 || topicSz > 255)
+    return -1;
+
+  if (((topicSz == 1) && (topicName[0] == '.')) ||
+      ((topicSz == 2) && (topicName[0] == '.') && (topicName[1] == '.'))) {
+    return -1;
+  }
+  uint32_t i ;
+  for (i = 0; i < topicSz; i++){
+    if (isalnum(topicName[i]) || topicName[i] == '.' ||
+        topicName[i] == '_' || topicName[i] == '-' ) {
+      continue;
+    } else {
+      if (isRegex) {
+        *isRegex = true;
+        return 0;
+      } else {
+        return -1;
+      }
+    }
+  }
+
+  return 0;
+}
+
+int streams_check_full_path_is_valid(const char *fullPath,
+                     uint32_t pathSize,
+                     bool *isRegex) {
+  if (isRegex) *isRegex = false;
+  if (pathSize < 1 || fullPath[0] != '/')
+      return -1;
+
+  uint32_t slashIdx = 0;
+  uint32_t colonIdx = 0;
+  // Look for the last '/' and first ':' after the last '/'l
+  uint32_t i ;
+  for ( i = pathSize - 1 ; i > 0; --i) {
+    char curChar = fullPath[i];
+    if (curChar == ':') {
+      colonIdx = i;
+    } else if (curChar == '/') {
+      slashIdx = i;
+      break;
+    }
+  }
+
+  if (colonIdx == 0 || colonIdx - slashIdx <= 1)
+    return -1;
+
+  uint32_t topicLen = pathSize - colonIdx - 1;
+  char topicName[topicLen + 1];
+  memcpy( topicName, &fullPath[colonIdx +1], topicLen );
+  topicName[topicLen +1] = '\0';
+  int err = streams_check_topic_name_is_valid(topicName, topicLen, isRegex);
+  if (err)
+    return err;
+
+  return 0;
 }

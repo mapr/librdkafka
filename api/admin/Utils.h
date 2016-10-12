@@ -2,6 +2,7 @@
 #define UTILS_SRC_H_
 #include <stdio.h>
 #include <sys/time.h>
+#include <stdexcept>
 
 #define ARRAY_SIZE(array) (sizeof((array))/sizeof((array[0])))
 #ifdef __GNUC__
@@ -16,13 +17,16 @@
 #endif
 
 enum STREAM_ERROR_CODES {
-  INVALID_ARGUMENT = -1,
-  SUCCESS = 0,
-  STREAM_CREATE_FAILED = 1,
-  STREAM_DELETE_FAILED = 2,
-  PRODUCER_CREATE_FAILED =3,
-  PRODUCER_SEND_FAILED = 4,
-  PRODUCER_POLL_FAILED = 5,
+  INVALID_ARGUMENT          = -1,
+  SUCCESS                   = 0,
+  STREAM_CREATE_FAILED      = 1,
+  STREAM_DELETE_FAILED      = 2,
+  PRODUCER_CREATE_FAILED    = 3,
+  PRODUCER_SEND_FAILED      = 4,
+  PRODUCER_POLL_FAILED      = 5,
+  CONSUMER_CREATE_FAILED    = 6,
+  CONSUMER_SUBSCRIBE_FAILED = 7,
+  CONSUMER_POLL_FAILED      = 8,
 };
 
 
@@ -41,11 +45,12 @@ static int stream_create(const char * streamName,
     sprintf(command, "maprcli stream delete -path %s%d 2>/dev/null ",
                                                       streamName, s);
     system(command);
-    sleep(1);
+    sleep(2);
     memset(command, 0, 1000);
     sprintf(command, "maprcli stream create -path %s%d \
           -defaultpartitions %d 2>/dev/null ", streamName, s, numParts);
     res += system(command);
+    sleep (2);
   }
   return res;
 }
@@ -87,4 +92,31 @@ static uint64_t stream_count_check(const char * streamName, int numStreams) {
   }
   return res;
 }
+//This api currently only monitors single topic partition
+static int streams_committed_offset_check(const char* streamName) {
+  char command[1000];
+  char *file = "commit.json";
+  int res = 0;
+  memset(command, 0, 1000);
+  //create json output file
+  sprintf(command, "maprcli stream cursor list -path  %s0 -json 2>/dev/null \
+                                              > %s ", streamName, file );
+  system (command);
+  //parse json file and get committed offset 
+  char parseCmd[1000];
+  memset(parseCmd, 0, 1000);
+  sprintf(parseCmd, "cd ../admin/; ./CommitedOffsetParsing.py ../test/%s", file);
+
+  char buf[128];
+  FILE* pipe = popen(parseCmd, "r");
+  if (!pipe) throw std::runtime_error("popen() failed!");
+  while (!feof(pipe)) {
+    if (fgets(buf, sizeof(buf), pipe) != NULL) {
+      res += (uint64_t)atoi(buf);
+    }
+  }
+  pclose(pipe);
+  return res;
+}
+
 #endif

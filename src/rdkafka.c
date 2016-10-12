@@ -1311,19 +1311,25 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
 				       &tp);
 
   char *copyPayload;
+  char *copyKey;
   //Copy payload
   if (payload && (msgflags & RD_KAFKA_MSG_F_COPY)) {
     /* Copy payload to space following the ..msg_t */
     copyPayload =  malloc (sizeof (char) * len);
     memcpy(copyPayload, payload, len);
+    if(keylen != 0) {
+      copyKey =  malloc (sizeof (char) * keylen);
+      memcpy(copyKey, key, keylen);
+    }
   } else {
     /* Just point to the provided payload. */
     copyPayload = payload;
+    copyKey = key;
   }
 
 	streams_producer_record_t record;
 	streams_producer_record_create(tp,
-				       key,
+				       (const char *)copyKey,
 				       keylen,
 				       (void *)copyPayload,
 				       len,
@@ -1344,7 +1350,7 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
 					    (const streams_producer_record_t) record,
 					    (const streams_producer_cb) streams_producer_wrapper_cb,
 					    opaque_wrapper);
-	streams_topic_partition_destroy(tp);
+  streams_topic_partition_destroy(tp);
 	return result;
 }
 /**
@@ -1376,7 +1382,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 			partition = INVALID_PARTITION_ID;
 
 		//Producing to streams
-		return streams_producer_send_wrapper(itopic,
+	  return streams_producer_send_wrapper(itopic,
 						     partition,
 						     msgflags,
 						     key,
@@ -1384,7 +1390,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 						     payload,
 						     len,
 						     msg_opaque );
-	} else {
+  } else {
 		if (is_streams_producer(itopic->rkt_rk))
 			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 		//producing to kafka
@@ -1915,6 +1921,11 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk) {
 
 rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk,
                                             int timeout_ms) {
+        if(!rk) {
+                rd_kafka_message_t *rkmessage = rd_kafka_message_new();
+                rkmessage->err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                return rkmessage;
+        }
         rd_kafka_cgrp_t *rkcg;
 
         if (unlikely(!(rkcg = rd_kafka_cgrp_get(rk)))) {
@@ -1928,13 +1939,17 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk,
 
 
 rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
-        rd_kafka_cgrp_t *rkcg;
-        rd_kafka_op_t *rko;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+
+	if (!rk)
+		return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+	rd_kafka_cgrp_t *rkcg;
+	rd_kafka_op_t *rko;
+	rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
 				bool was_streams_consumer = false;
 
-        if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+	if (!(rkcg = rd_kafka_cgrp_get(rk)))
+		return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
 	if (is_streams_consumer(rk)) {
 		streams_consumer_destroy(rk->streams_consumer);

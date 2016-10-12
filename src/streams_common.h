@@ -162,13 +162,6 @@ streams_config_destroy(streams_config_t config);
 STREAMS_API int32_t
 streams_config_print(const streams_config_t config);
 
-/**
- *\brief Inspect the fullPath and confirm if this is valid marlin path (</path>:<topic_name>)
- *\return true if path is valid and false if path is not.
- */
-STREAMS_API bool
-streams_is_full_path_valid(const char *fullPath, bool *isRegex);
-
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif

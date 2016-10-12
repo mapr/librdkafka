@@ -1,0 +1,276 @@
+/**
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements. See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership. The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License. You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <time.h>
+#include <unistd.h>
+#include <string>
+#include <gtest/gtest.h>
+#include "../../src/rdkafka.h"
+#include "../consumer/Consumer.cc"
+#include "../producer/Producer.cc"
+#include "../consumer/ConsumerTest.h"
+#include "../consumer/ConsumerTest.cc"
+
+char *STREAM_COMMIT = "/gtest-ConsumerCommit";
+char *STREAM_POLL = "/gtest-ConsumerPoll";
+char *STREAM_UNSUBSCRIBE = "/gtest-ConsumerUnsubscribe";
+char *STREAM_CLOSE = "/gtest-ConsumerClose";
+char *STREAM_COMBINATION = "/gtest-ConsumerCombination";
+
+class SubscribeTest: public testing::Test {
+
+protected:
+  char *strName ;
+  virtual void SetUp() {
+    strName = "/gtest-ConsumerTest";
+    stream_create(strName, 1/*Num of Streams*/, 1/*Default Partitions*/);
+    sleep (1);
+  }
+  virtual void TearDown() {
+    stream_delete(strName, 1);
+  }
+};
+
+void consumer_poll_test_case (char *path, int nstreams, int ntopics,int nparts,
+                              int nmsgs, int msgsize, int flag,
+                              bool roundRb, int nslowtopics, bool print,
+                              uint64_t timeout, const char* groupid, bool topicSub,
+                              bool autoCommit, bool verify) {
+  int expectedMsgs =  nstreams * nparts *
+                  (ntopics * nmsgs + nslowtopics * nmsgs /1000);
+  ASSERT_EQ (0, stream_create (path, nstreams , nparts));
+  EXPECT_EQ (expectedMsgs, ConsumerTest::runPollTest (path, nstreams, ntopics,
+                                            nparts, nmsgs, msgsize,flag,
+                                            roundRb, nslowtopics, print, timeout,
+                                            groupid, topicSub, autoCommit, verify ));
+  ASSERT_EQ (0, stream_delete (path, nstreams));
+}
+
+void consumer_offset_commit_test_case (char *strName, const char *groupid,
+                                       bool consumerInvalid, bool topicInvalid,
+                                       bool offsetInvalid) {
+  ASSERT_EQ(0, stream_create(strName, 1, 1));
+  sleep (1);
+  int out = ConsumerTest::runCommitTest (strName, groupid , consumerInvalid,
+                                        topicInvalid, offsetInvalid);
+  int err = 0;
+  if(topicInvalid)
+    err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+  else if(consumerInvalid)
+    err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+  else
+    err = streams_committed_offset_check(strName);
+
+  EXPECT_EQ(err, out);
+  ASSERT_EQ(0, stream_delete(strName, 1));
+}
+
+
+/*-----------------------------------------------*/
+/*Consumer Create Tests*/
+/*-----------------------------------------------*/
+TEST(ConsumerTest, consumerCreateDefaultTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runConsumerCreateTest (true, true));
+}
+/*NULL conf is valid input*/
+TEST(ConsumerTest, consumerCreateNullConfTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runConsumerCreateTest (false, true));
+}
+/*NULL type is valid input, defaults to RD_KAFKA_PRODUCER*/
+TEST(ConsumerTest, consumerCreateNullTypeTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runConsumerCreateTest (true, false));
+}
+TEST(ConsumerTest, consumerCreateInvalidArgTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runConsumerCreateTest (false, false));
+}
+
+/*-----------------------------------------------*/
+/*Consumer Subscribe Tests*/
+/*-----------------------------------------------*/
+
+TEST_F(SubscribeTest, maprConsumerDefaultSubscribeTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, true,
+                                                     0, 0, "ConsumerTest", false ));
+}
+TEST_F(SubscribeTest, kafkaConsumerDefaultSubscribeTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, true,
+                                                     0, 1, "ConsumerTest", false ));
+}
+TEST_F(SubscribeTest, maprConsumerInvalidTypeSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, false,
+                                      0, 0, "ConsumerTest", false ));
+}
+TEST_F(SubscribeTest, kafkaConsumerInvalidTypeSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, false,
+                                      0, 1, "ConsumerTest", false ));
+}
+TEST_F(SubscribeTest, maprConsumerInvalidGroupSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, true,
+                                      0, 0, NULL, false ));
+}
+TEST_F(SubscribeTest, kafkaConsumerInvalidGroupSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, true,
+                                      0, 1, NULL, false ));
+}
+TEST_F(SubscribeTest, maprConsumerMaprTopicSubscribeTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,2, 2, true,
+                                                     1, 0, "ConsumerTest", false));
+}
+TEST_F(SubscribeTest, maprConsumerKafkaTopicSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+                                                     1, 1, "ConsumerTest", false));
+}
+TEST_F(SubscribeTest, maprConsumerMixedTopicSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+                                                     1, 2, "ConsumerTest", false));
+}
+TEST_F(SubscribeTest, kafkaConsumerKafkaTopicSubscribeTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,2, 2, true,
+                                                     2, 1, "ConsumerTest", false));
+}
+TEST_F(SubscribeTest, kafkaConsumerMaprTopicSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+                                                     2, 0, "ConsumerTest", false));
+}
+TEST_F(SubscribeTest, kafkaConsumerMixedTopicSubscribeTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+                                                     2, 2, "ConsumerTest", false));
+}
+/*-----------------------------------------------*/
+/*Consumer Poll Tests*/
+/*-----------------------------------------------*/
+TEST(ConsumerTest, consumerPollSingleMsgTest) {
+  consumer_poll_test_case (STREAM_POLL,1/**/, 1, 1, 1, 200,
+                           RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
+                           "consumerPollSingleMsgTestGr", true, true, false );
+}
+TEST(ConsumerTest, consumerPollMultiStreamTest) {
+  consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200,
+                           RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
+                           "consumerPollMultiStreamTestGr", true, true, false );
+}
+TEST(ConsumerTest, consumerPollMediumSizeMsgTest) {
+    consumer_poll_test_case (STREAM_POLL, 2, 4, 2, 100, 9*1024*1024/10,
+                             RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
+                             "consumerPollMediumMsgTestGr", true, true, false );
+}
+/*  librdkafka default msg size : 1000000
+ *  Fix after config api is done
+ */
+TEST(ConsumerTest, DISABLED_consumerPollLargeSizeMsgTest) {
+    consumer_poll_test_case (STREAM_POLL, 2, 4, 2, 100, 1*1024*1024,
+                             RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
+                             "consumerPollMediumMsgTestGr", true, true, false );
+}
+TEST(ConsumerTest, consumerPollVerifyOrderTest) {
+  consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200, 
+                           RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
+                           "consumerPollVerifyOrderTestGr", true, true, false );
+}
+TEST(ConsumerTest, consumerPollVerifyOrderCommitTest) {
+  consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200,
+                           RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
+                           "consumerPollVerifyOrderTestGr", true, false, false );
+}
+TEST(ConsumerTest, DISABLED_consumerPollVerifyOrderMsgFreeTest) {
+  consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200,
+                           RD_KAFKA_MSG_F_FREE, true, 0, false, 30,
+                           "consumerPollVerifyOrderMsgFreeTestGr", true, true, true );
+}
+/*-----------------------------------------------*/
+/*Consumer Offset Commit Test*/
+/*-----------------------------------------------*/
+TEST(ConsumerTest, commitValidTopicTest) {
+ consumer_offset_commit_test_case (STREAM_COMMIT, "commitValidTopicTestGr",
+                                   false, false, false);
+}
+TEST(ConsumerTest, commitInvalidTopicTest) {
+  consumer_offset_commit_test_case (STREAM_COMMIT, "commitInvalidTopicTestGr",
+                                    false, true, false);
+}
+TEST(ConsumerTest, commitNullOffsetTest) {
+  consumer_offset_commit_test_case (STREAM_COMMIT, "commitNullOffsetTestGr",
+                                    false, false, true);
+}
+TEST(ConsumerTest, commitNullConsumerTest) {
+  consumer_offset_commit_test_case (STREAM_COMMIT, "commitNullConsumerTestGr",
+                                    true, false, false);
+}
+
+/*-----------------------------------------------*/
+/*Consumer unsubscribe Test*/
+/*-----------------------------------------------*/
+
+TEST(ConsumerTest, consumerUnsubscribeTest) {
+  ASSERT_EQ(0, stream_create (STREAM_UNSUBSCRIBE, 4, 2));
+  EXPECT_EQ (8, ConsumerTest::runUnsubscribeTest (STREAM_UNSUBSCRIBE, 4, 2, 2,
+                                                  1, 200, true, 0, true, 30,
+                                                  "ConsumerTest"));
+}
+/*-----------------------------------------------*/
+/*Consumer assign revoke cb test*/
+/*-----------------------------------------------*/
+TEST(ConsumerTest, DISABLED_consumerAssignRevokeCb) {
+  ASSERT_EQ (0, stream_create(STREAM_UNSUBSCRIBE, 1, 12));
+  ConsumerTest::runAssignRevokeCbTest (STREAM_UNSUBSCRIBE, 12);
+}
+/*-----------------------------------------------*/
+/*Consumer close test*/
+/*-----------------------------------------------*/
+
+TEST(ConsumerTest, consumerCloseDefaultTest) {
+  ASSERT_EQ (0, stream_create(STREAM_CLOSE, 1, 1));
+  EXPECT_EQ (5 ,ConsumerTest::runConsumerCloseTest (STREAM_CLOSE,
+                                            "consumerCloseGr", false));
+}
+
+TEST(ConsumerTest, consumerCloseNullTest) {
+  ASSERT_EQ (0, stream_create(STREAM_CLOSE, 1, 1));
+  EXPECT_EQ (RD_KAFKA_RESP_ERR__INVALID_ARG,
+            ConsumerTest::runConsumerCloseTest (STREAM_CLOSE,
+                                              "counsumerCloseGr",  true));
+}
+
+/*-----------------------------------------------*/
+/*Consumer-Producer combination test*/
+/*-----------------------------------------------*/
+TEST (ConsumerTest, backToBackTest) {
+  ASSERT_EQ (0, stream_create(STREAM_COMBINATION, 1, 1));
+  EXPECT_EQ (0, ConsumerTest::runConsumerBack2BackTest(STREAM_COMBINATION));
+}
+
+
+int main (int argc, char **argv) {
+  testing::InitGoogleTest (&argc, argv);
+  return RUN_ALL_TESTS();
+}

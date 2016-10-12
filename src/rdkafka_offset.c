@@ -574,13 +574,14 @@ streams_commit_topics (rd_kafka_t *rk,
 
 rd_kafka_resp_err_t
 streams_rd_kafka_commit_wrapper (rd_kafka_t *rk,
-																const rd_kafka_topic_partition_list_t *offsets,
-																int async,
-																bool *is_kafka_commit) {
-	is_kafka_commit = false;
+                                const rd_kafka_topic_partition_list_t *offsets,
+                                int async,
+                                bool *is_kafka_commit) {
+	*is_kafka_commit = false;
 	if (offsets == NULL) {
 		if (is_streams_consumer(rk)) {
-			streams_consumer_commit_all_sync((const streams_consumer_t) rk->streams_consumer);
+			streams_consumer_commit_all_sync(
+                  (const streams_consumer_t)rk->streams_consumer);
 			return RD_KAFKA_RESP_ERR_NO_ERROR;
 		} else {
 			*is_kafka_commit = true;
@@ -588,8 +589,10 @@ streams_rd_kafka_commit_wrapper (rd_kafka_t *rk,
 	}
 
 	if (!(*is_kafka_commit)) {
+		// TODO: free streams_topics should this be saved under
+		// rk->cgrp->assignment/subscriptions ?
 		streams_topic_partition_t *streams_topics =
-		rd_malloc (offsets->cnt * sizeof(streams_topic_partition_t));  // TODO: free streams_topics should this be saved under rk->cgrp->assignment/subscriptions ?
+		rd_malloc (offsets->cnt * sizeof(streams_topic_partition_t));
 		int64_t *cursor = rd_malloc (offsets->cnt * sizeof(int64_t));
 		uint32_t tp_size = 0;
 		int topic_validity = streams_get_topic_commit_info (rk,
@@ -598,16 +601,17 @@ streams_rd_kafka_commit_wrapper (rd_kafka_t *rk,
 								    cursor,
 								    &tp_size);  // TODO: Regex topics
 
-		switch (topic_validity) {
+    switch (topic_validity) {
 
 		case -1:
 			streams_topic_partition_free (streams_topics, tp_size);
 			rd_free(cursor);
-			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;        // TODO: return proper error code
+			// TODO: return proper error code
+			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 
 		case 0:
 			if (is_streams_consumer(rk))
-				streams_commit_topics (rk->streams_consumer,
+				streams_commit_topics (rk,
 						       offsets,
 						       streams_topics,
 						       cursor,
@@ -615,18 +619,21 @@ streams_rd_kafka_commit_wrapper (rd_kafka_t *rk,
 						       async);
 			else
 				return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
-
+			break;
 		case 1:
 				*is_kafka_commit = true;
 				streams_topic_partition_free (streams_topics, tp_size);
 				rd_free(cursor);
+				if (is_streams_consumer(rk))
+					return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 				break;
 
 		default:
 			streams_topic_partition_free (streams_topics, tp_size);
 			rd_free(cursor);
 			rd_dassert(topic_validity > 1 || topic_validity < -1);
-		}
+		  break;
+    }
 	}
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -638,7 +645,9 @@ rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *offsets,
 								 int async) {
-  rd_kafka_cgrp_t *rkcg;
+	if(!rk)
+		return RD_KAFKA_RESP_ERR__INVALID_ARG;
+	rd_kafka_cgrp_t *rkcg;
 	rd_kafka_resp_err_t err;
 	rd_kafka_q_t *tmpq = NULL;
 	bool is_kafka_commit = false;
@@ -647,11 +656,12 @@ rd_kafka_commit (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
 	err = streams_rd_kafka_commit_wrapper (rk,
-																				offsets,
-																				async,
-																				&is_kafka_commit);
-	if (is_kafka_commit) {
-
+                                         offsets,
+                                         async,
+                                         &is_kafka_commit);
+	if (is_kafka_commit && !err) {
+		if(is_streams_consumer(rk))
+			return  RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		if (!async)
 			tmpq = rd_kafka_q_new(rk);
 

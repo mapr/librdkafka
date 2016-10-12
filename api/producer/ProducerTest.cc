@@ -113,7 +113,8 @@ int ProducerTest::runProducerCombinationTest(char *path, int nstreams,
   ProducerThreadArgs threadArgs[nproducers];
   for (int p = 0; p < nproducers; ++p) {
     producerArr[p] = new Producer(path, nstreams, ntopics, nparts, nmsgs,
-                                 msgsize, roundRb, nslowtopics, print, timeout);
+                                 msgsize, RD_KAFKA_MSG_F_COPY, roundRb,
+                                 nslowtopics, print, timeout);
     ProducerThreadArgs *pt = &threadArgs[p];
     pt->producer = producerArr[p];
     pt->retdata = retDataArr + p;

@@ -181,8 +181,8 @@ TEST(ProducerTest, testSendOneMediumMessageSingleStream) {
 }
 TEST(ProducerTest, testSendTenTopicsMediumMessageSingleStream) {
   combination_test (STREAM, 1/*# of streams*/, 10/*# of topics*/,
-                    10/*# of partn per topic*/,
-                    1000/*# of msgs per partition*/, 1/*numProducer*/,
+                    2/*# of partn per topic*/,
+                    10/*# of msgs per partition*/, 1/*numProducer*/,
                     9*1024*1024/10/*Msg size*/, true/*Round Robin*/,
                     0/*Slow Topics*/, false/*Print*/,
                     45 * 1000/*pollWaitTimeOutMS*/);
