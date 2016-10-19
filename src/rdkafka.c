@@ -1364,7 +1364,6 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
 	if (streams_is_valid_topic_name(itopic->rkt_topic->str)) {
-		partition = INVALID_PARTITION_ID;
 		if(itopic->rkt_rk->kafka_producer)
 			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
