@@ -97,7 +97,7 @@ void produce_batch_test (char* strName, char *topicName, int startPartId,
                                         topicName, startPartId, numPartition,
                                         flag, totalMsgs));
     EXPECT_EQ (totalMsgs, stream_count_check(strName, 1));
-    //EXPECT_EQ (SUCCESS, stream_delete(strName, 1));
+    EXPECT_EQ (SUCCESS, stream_delete(strName, 1));
 }
 /*-----------------------------------------------*/
 /*Producer Create Tests*/
