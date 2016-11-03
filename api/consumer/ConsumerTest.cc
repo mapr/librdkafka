@@ -41,6 +41,7 @@ int ConsumerTest::runConsumerCreateTest(bool isConfValid,
 
 void populateTopicPartitionList (char *strName, int numStreams, int numTopics,
                                 int numPartitions, int topicType, bool isAssign,
+                                unordered_map <string, int, keyHasher> *subscrMap,
                                 rd_kafka_topic_partition_list_t **outList) {
   for (int s = 0; s <  numStreams; ++s) {
     for (int t = 0; t < numTopics; ++t) {
@@ -60,24 +61,53 @@ void populateTopicPartitionList (char *strName, int numStreams, int numTopics,
                 break;
       }
       if(isAssign) {
-        for(int p = 0; p < numPartitions ; ++p )
+        for(int p = 0; p < numPartitions ; ++p ) {
           rd_kafka_topic_partition_list_add(*outList, currentName , p);
+          char temp[200];
+          sprintf(temp, "%s:%d", currentName, p);
+          if (subscrMap) (*subscrMap)[temp] = 1;
+        }
       } else {
+          if (subscrMap) (*subscrMap)[currentName] = 1;
           rd_kafka_topic_partition_list_add(*outList, currentName,
                                             RD_KAFKA_PARTITION_UA);
       }
-
     }
   }
 }
 
-void subscribe_consumer (char *strName, rd_kafka_t *consumer, bool kafkaConsumer) {
+bool verifySubscriptions (rd_kafka_topic_partition_list_t *inList,
+                          unordered_map <string, int, keyHasher> subscrMap,
+                          bool isAssign) {
+  int count =0;
+  for (int i = 0; i < inList->cnt; i++) {
+    if (isAssign) {
+      char temp[200];
+      memset(temp, '\0', 200);
+      sprintf(temp, "%s:%d", inList->elems[i].topic, inList->elems[i].partition);
+      if (subscrMap.count (temp) > 0)
+          count ++;
+    } else {
+        if (subscrMap.count (inList->elems[i].topic) > 0)
+          count ++;
+    }
+  }
+
+  if (count == inList->cnt)
+    return true;
+
+  return false;
+}
+
+void subscribe_consumer (char *strName, rd_kafka_t *consumer,
+                         unordered_map <string, int, keyHasher> *subscrMap,
+                         bool kafkaConsumer) {
   rd_kafka_topic_partition_list_t *init_list =
                                          rd_kafka_topic_partition_list_new(1);
   if (kafkaConsumer)
-    populateTopicPartitionList(strName, 1, 1, 1, 1, false, &init_list);
+    populateTopicPartitionList(strName, 1, 1, 1, 1, false, subscrMap, &init_list);
   else
-    populateTopicPartitionList(strName, 1, 1, 1, 0, false, &init_list);
+    populateTopicPartitionList(strName, 1, 1, 1, 0, false, subscrMap, &init_list);
 
   rd_kafka_subscribe(consumer, init_list);
   rd_kafka_topic_partition_list_destroy (init_list);
@@ -104,9 +134,9 @@ void rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
  *               2 (Kafka consumer - subscribed to kafka topic)
  */
 int ConsumerTest::runSubscribeTest (char *strName, int numStreams, int numTopics,
-                                    bool isConsumerValid, int consumerType,
-                                    int topicType, const char *groupId,
-                                    bool isAssign) {
+                                    int numPartitions, bool isConsumerValid,
+                                    int consumerType, int topicType,
+                                    const char *groupId, bool isAssign) {
     rd_kafka_t *consumer;
     rd_kafka_conf_t *conf = rd_kafka_conf_new();
     char errstr[128];
@@ -117,44 +147,58 @@ int ConsumerTest::runSubscribeTest (char *strName, int numStreams, int numTopics
       consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
     else
       consumer = rd_kafka_new (RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
-    int numPartitions  = 1;
     int nTotalTp = numStreams * numTopics * numPartitions;
+    std::unordered_map<std::string, int, keyHasher> subscrMap;
     rd_kafka_topic_partition_list_t *tp_list =
                                     rd_kafka_topic_partition_list_new(nTotalTp);
     int retVal = SUCCESS;
     if (consumerType == 1)// mapr consumer
-      subscribe_consumer (strName, consumer, false);
+      subscribe_consumer (strName, consumer, &subscrMap, false);
     else if (consumerType == 2)// kafka consumer
-      subscribe_consumer (strName, consumer, true);
+      subscribe_consumer (strName, consumer, &subscrMap, true);
     else// default consumer - not mapr/kafka
       ;
 
     switch (topicType) {
     case 0: // All Mapr topics
             populateTopicPartitionList(strName, numStreams, numTopics,
-                                       numPartitions, 0, isAssign, &tp_list);
+                                       numPartitions, 0, isAssign, &subscrMap,
+                                       &tp_list);
             break;
 
     case 1: // All kafka topics
             populateTopicPartitionList(strName, numStreams, numTopics,
-                                       numPartitions, 1, isAssign, &tp_list);
+                                       numPartitions, 1, isAssign, &subscrMap,
+                                       &tp_list);
             break;
 
     case 2: // Mixed topics
             populateTopicPartitionList(strName, numStreams, numTopics,
-                                       numPartitions, 2, isAssign, &tp_list);
+                                       numPartitions, 2, isAssign, &subscrMap,
+                                       &tp_list);
             break;
     default:
             retVal = INVALID_ARGUMENT;
             break;
     }
-
-    if (isAssign)
-      cerr << "rd_kafka_assign not implemented yet"; 
-    else
+    rd_kafka_topic_partition_list_t *outList;
+    if (isAssign) {
+      retVal = rd_kafka_assign(consumer, tp_list);
+      rd_kafka_assignment(consumer, &outList);
+    } else {
       retVal = rd_kafka_subscribe(consumer, tp_list);
-
-    rd_kafka_topic_partition_list_destroy(tp_list);
+      rd_kafka_subscription(consumer, &outList);
+    }
+    if (retVal == SUCCESS) {
+      if (!verifySubscriptions (outList, subscrMap, isAssign)){
+        cerr << "\n Subscription mismatch. Verification failed!";
+        retVal = -1;
+      }
+    }
+    if(tp_list)
+      rd_kafka_topic_partition_list_destroy(tp_list);
+    if(outList)
+      rd_kafka_topic_partition_list_destroy(outList);
     rd_kafka_consumer_close(consumer);
     rd_kafka_destroy (consumer);
     return retVal;
@@ -169,6 +213,7 @@ uint64_t ConsumerTest::runPollTest(char *path, int nstreams, int ntopics,int npa
   uint64_t cb = 0;
   p.runTest (path, nstreams, ntopics, nparts, nmsgs,
                              msgsize, flag, roundRb, nslowtopics, false, timeout, &cb);
+  sleep (2);
   Consumer c;
   return c.runTest (path, nstreams, ntopics, nparts, nmsgs, groupid, topicSub,
                             autoCommit, verify, print);
@@ -193,13 +238,13 @@ int ConsumerTest::runUnsubscribeTest (char *path, int nstreams, int ntopics,
 
   rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-
+  std::unordered_map<std::basic_string<char>, int, keyHasher> subscrMap;
   //Subscribe to topics
   int nTotalTp = nstreams * ntopics * nparts;
   rd_kafka_topic_partition_list_t *tp_list =
                                     rd_kafka_topic_partition_list_new(nTotalTp);
   populateTopicPartitionList(path, nstreams, ntopics,
-                                       nparts, 0, false, &tp_list);
+                                       nparts, 0, false, &subscrMap, &tp_list);
   rd_kafka_subscribe (consumer, tp_list);
   int totalMsgs = nstreams * ntopics * nparts * nmsgs;
   //start consuming
@@ -488,7 +533,7 @@ int ConsumerTest::runConsumerCloseTest (char *strName, char * groupid,
   char errstr[128];
   rd_kafka_conf_set(conf, "group.id", groupid , errstr, sizeof(errstr));
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-  subscribe_consumer (strName, consumer, false /*kafkaConsumer*/);
+  subscribe_consumer (strName, consumer, NULL, false /*kafkaConsumer*/);
   int msgCount = 0;
   int noMsg = 0;
   if (consumerInvalid)
@@ -541,4 +586,120 @@ int ConsumerTest::runConsumerBack2BackTest (char *strName) {
   s =  pthread_timedjoin_np (threadArgs.thread, NULL, &ts);
   return s;
 }
+void print_topic_partition_list (char *str,
+                                rd_kafka_topic_partition_list_t *list) {
+  cout << "\n" <<str;
+  for (int i =0; i< list->cnt; i++) {
+    cout << "\n Topic:" << list->elems[i].topic;
+    cout << "\t Partition:" << list->elems[i].partition;
+    cout << "\t Offset:" << list->elems[i].offset;
+  }
+}
+void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid) {
+  Producer p;
+  uint64_t cb = 0;
+  int produceMsg = 1000;
+  //Produce 1000 messages.
+  p.runTest (strName, 1, 1, 1, produceMsg,
+             200, RD_KAFKA_MSG_F_COPY, false, 0, false, 15, &cb);
 
+  rd_kafka_t *consumer;
+  rd_kafka_conf_t *conf = rd_kafka_conf_new();
+  char errstr[128];
+  rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf, "group.id", groupid , errstr, sizeof(errstr));
+  consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+
+  rd_kafka_topic_partition_list_t *tp_list =
+                                    rd_kafka_topic_partition_list_new(0);
+  rd_kafka_topic_partition_list_t *out_list =
+                                    rd_kafka_topic_partition_list_new(0);
+  rd_kafka_topic_partition_list_t *commit_list =
+                                    rd_kafka_topic_partition_list_new(0);
+  int ntopics = 1;
+  char currentName[100];
+  //populate tp list for consumer
+  for (int t = 0; t < ntopics; ++t) {
+    memset ( currentName, '\0', 100);
+    sprintf(currentName, "%s0:topic%d",  strName, t);
+    rd_kafka_topic_partition_list_add(tp_list, currentName, RD_KAFKA_PARTITION_UA);
+    rd_kafka_topic_partition_list_add(out_list, currentName, 0);
+  }
+
+  rd_kafka_subscribe (consumer, tp_list);
+  int msgCount = 0;
+  int numMsgs = 100;
+  int offset = -1;
+  rd_kafka_topic_t *rkt;
+  //consume 100 messages and commit the offset
+  while (msgCount < numMsgs) {
+    rd_kafka_message_t *rkmessage;
+    rkmessage = rd_kafka_consumer_poll (consumer, 100);
+    if (rkmessage) {
+      msgCount ++;
+      cout << "\n" << (char *) rkmessage->payload;
+      if (msgCount == numMsgs){
+        offset = rkmessage->offset;
+        rkt = rkmessage->rkt;
+      }
+      rd_kafka_message_destroy (rkmessage);
+    }
+  }
+  //commit the offset
+  rd_kafka_topic_partition_t *rktpar =
+    rd_kafka_topic_partition_list_add (commit_list, currentName, 0);
+ // rd_kafka_topic_partition_list_set_offset (tp_list, currentName, 0, offset+1);
+  rktpar->offset = offset + 1;
+  rd_kafka_commit (consumer, commit_list, 0);
+  sleep (3);
+  rd_kafka_committed (consumer, out_list, 1000);
+  print_topic_partition_list("Committed after 100 consumed messaged.",  out_list);
+  rd_kafka_position (consumer, out_list);
+  print_topic_partition_list("Position:" ,  out_list);
+  // seek to offset 500
+  rd_kafka_seek (rkt, 0, 500, 2000 );
+  rd_kafka_position (consumer, out_list);
+  print_topic_partition_list("Position after seek to 500:" ,  out_list);
+  msgCount = 0;
+  // consume 30 messages.
+  while (msgCount < 30) {
+    rd_kafka_message_t *rkmessage;
+    rkmessage = rd_kafka_consumer_poll (consumer, 100);
+    if (rkmessage) {
+      msgCount ++;
+      cout << "\n" << (char *) rkmessage->payload;
+      if (msgCount == numMsgs){
+        offset = rkmessage->offset;
+        rkt = rkmessage->rkt;
+      }
+      rd_kafka_message_destroy (rkmessage);
+    }
+  }
+  // commit the offset
+  // rd_kafka_topic_partition_list_set_offset (tp_list, currentName, 0, offset)
+  rktpar->offset = offset +1;
+  rd_kafka_commit (consumer, commit_list, 0);
+  sleep (3);
+  rd_kafka_committed (consumer, out_list, 1000);
+  print_topic_partition_list("Committed after 30 consumed messaged.",  out_list);
+  rd_kafka_position (consumer, out_list);
+  print_topic_partition_list("Position:" ,  out_list);
+  // seek to offset 500
+  rd_kafka_seek (rkt, 0, 5, 2000 );
+  rd_kafka_position (consumer, out_list);
+  print_topic_partition_list("Position after seek:" ,  out_list);
+  msgCount = 0;
+  while (msgCount < 200) {
+    rd_kafka_message_t *rkmessage;
+    rkmessage = rd_kafka_consumer_poll (consumer, 100);
+    if (rkmessage) {
+      msgCount ++;
+      cout << "\n" <<  (char *)rkmessage->payload;
+      if (msgCount == 200){
+        offset = rkmessage->offset;
+        rkt = rkmessage->rkt;
+      }
+      rd_kafka_message_destroy (rkmessage);
+    }
+  }
+}

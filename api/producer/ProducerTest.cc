@@ -102,7 +102,7 @@ void *ProducerRun(void *arg)
 
 int ProducerTest::runProducerCombinationTest(char *path, int nstreams,
                                               int ntopics,int nparts, int nmsgs,
-                                              int nproducers, int msgsize,
+                                              int nproducers, int msgsize, int flag,
                                               bool roundRb, int nslowtopics,
                                               bool print, uint64_t timeout,
                                               uint64_t *numCallbacks){
@@ -113,7 +113,7 @@ int ProducerTest::runProducerCombinationTest(char *path, int nstreams,
   ProducerThreadArgs threadArgs[nproducers];
   for (int p = 0; p < nproducers; ++p) {
     producerArr[p] = new Producer(path, nstreams, ntopics, nparts, nmsgs,
-                                 msgsize, RD_KAFKA_MSG_F_COPY, roundRb,
+                                 msgsize, flag, roundRb,
                                  nslowtopics, print, timeout);
     ProducerThreadArgs *pt = &threadArgs[p];
     pt->producer = producerArr[p];
@@ -267,4 +267,75 @@ int ProducerTest::runProducerMixedTopicTest(char * strName, int type){
   rd_kafka_topic_destroy(kafkaTopicObj);
   rd_kafka_destroy(producer);
   return err;
+}
+
+int ProducerTest::runProducerBatchTest (const char *strName,
+                                        char *topicName, int startPartId,
+                                        int numPart, int msgFlags, int totalMsgs) {
+
+  rd_kafka_topic_t *rkt;
+  rd_kafka_conf_t *conf;
+  rd_kafka_t *rk;
+  char errstr[512];
+  char msg[128];
+  int i;
+  rd_kafka_message_t *rkmessages;
+  int retCount = 0;
+  int ret = -1;
+  conf = rd_kafka_conf_new();
+  char streamTopic[200];
+  sprintf(streamTopic, "%s0:%s", strName, topicName);
+  rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+  rkt = rd_kafka_topic_new(rk, streamTopic, rd_kafka_topic_conf_new());
+
+  if (startPartId != -1) {
+    rkmessages = (rd_kafka_message_t*) calloc(sizeof(*rkmessages), totalMsgs / numPart);
+    for (int partition = startPartId ;
+            partition < (startPartId + numPart) ; partition++) {
+      int batch_cnt = totalMsgs / numPart;
+
+      for (i = 0 ; i < batch_cnt ; i++) {
+        sprintf(msg, "Value:%s:%d:%d", streamTopic, partition, i);
+        rkmessages[i].payload   = strdup(msg);
+        rkmessages[i].len       = strlen(msg);
+      }
+
+      ret = rd_kafka_produce_batch (rkt, partition, msgFlags,
+                                           rkmessages, batch_cnt);
+      if (ret == -1)
+        cerr << "\n Failed to produce to partition " << partition;
+      else
+        retCount += ret;
+
+      if (msgFlags & RD_KAFKA_MSG_F_COPY) {
+        for (int j = 0; j< batch_cnt; j++) 
+          free (rkmessages[j].payload);
+      }
+    }
+  } else {
+    rkmessages = (rd_kafka_message_t*) calloc(sizeof(*rkmessages), totalMsgs);
+    for (i = 0 ; i < totalMsgs ; i++) {
+        sprintf(msg, "Value:%s:%d", streamTopic, i);
+        rkmessages[i].payload   = strdup(msg);
+        rkmessages[i].len       = strlen(msg);
+      }
+
+      ret = rd_kafka_produce_batch (rkt, startPartId, msgFlags,
+                                           rkmessages, totalMsgs);
+      if (ret == -1)
+        cerr << "\n Failed to produce to partition " << startPartId;
+      else
+        retCount += ret;
+      
+      if (msgFlags & RD_KAFKA_MSG_F_COPY) {
+        for (int j = 0 ; j < totalMsgs; j++) {
+          free (rkmessages[j].payload);
+        }
+      }
+  }
+
+  free(rkmessages);
+  rd_kafka_topic_destroy(rkt);
+  rd_kafka_destroy(rk);
+  return retCount ;
 }

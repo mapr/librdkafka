@@ -175,34 +175,48 @@ uint64_t Consumer::run() {
 	rd_kafka_topic_partition_list_t *tp_list =
                               rd_kafka_topic_partition_list_new(nTotalTp);
 
-	if (topicSubscription) {
-		for (int s = 0; s <  numStreams; ++s) {
-			for (int t = 0; t < numTopics; ++t) {
-			  char currentName[100];
-				memset ( currentName, '\0', 100);
-				int tempIndex = s* numTopics +t;
-				sprintf(currentName, "%s%d:topic%d",  streamName, s, t);
-				for(int p = 0; p < numPartitions ; ++p ) {
-					rd_kafka_topic_partition_list_add(tp_list, currentName , p);
-				}
-			}
+	for (int s = 0; s <  numStreams; ++s) {
+		for (int t = 0; t < numTopics; ++t) {
+		  char currentName[100];
+			memset ( currentName, '\0', 100);
+			int tempIndex = s* numTopics +t;
+			sprintf(currentName, "%s%d:topic%d",  streamName, s, t);
+			if (topicSubscription) {
+			   rd_kafka_topic_partition_list_add(tp_list, currentName,
+                                          RD_KAFKA_PARTITION_UA);
+			} else{
+			    for(int p = 0; p < numPartitions ; ++p )
+				    rd_kafka_topic_partition_list_add(tp_list, currentName , p);
+      }
 		}
-		rb_ctx.subscriptionCnt = tp_list->cnt;
-		rd_kafka_subscribe(consumer, tp_list);
-		rd_kafka_topic_partition_list_destroy(tp_list);
-	} else {
-		printf("TODO: Assign partitions not yet implemented.");
-		exit(1);
 	}
+  rd_kafka_topic_partition_list_t *outList = rd_kafka_topic_partition_list_new(0);
+  if (topicSubscription) {
+    rb_ctx.subscriptionCnt = tp_list->cnt;
+    rd_kafka_subscribe(consumer, tp_list);
+    sleep (2);
+    if(verifyKeys)
+      rd_kafka_subscription (consumer, &outList);
+  } else {
+    rd_kafka_assign(consumer, tp_list);
+    if(verifyKeys)
+      rd_kafka_assignment (consumer, &outList);
+  }
+  for (int i=0; i < outList->cnt; i++) {
+    cout << "\n topic: " << outList->elems[i].topic;
+    cout << "\t partition: " << outList->elems[i].partition;
+    cout << "\t offset: " << outList->elems[i].offset;
+  }
+
   int prevMsgId[nTotalTp];
   std::fill_n(prevMsgId, nTotalTp, -1);
-	ConsumerPerfStats *stats = new ConsumerPerfStats();
+  ConsumerPerfStats *stats = new ConsumerPerfStats();
   int msgCount = 0;
 	while (true) {
 		rd_kafka_message_t *rkmessage;
 		rkmessage = rd_kafka_consumer_poll(consumer, 1000);
 		if (rkmessage) {
-      msgCount++;
+			msgCount++;
 			pollsWithMissingMsgs = 0;
 			verifyAndAddStats(rkmessage, stats, numTopics, numPartitions,
                         autoCommitEnabled, verifyKeys,
@@ -221,20 +235,20 @@ uint64_t Consumer::run() {
 		stats->printReport();
 
   int commitResult = -1;
-	if (!autoCommitEnabled) {
+  if (!autoCommitEnabled) {
     rd_kafka_topic_partition_list_t *c_offsets = rd_kafka_topic_partition_list_new(1);
-		get_commit_offset_list(offsetCommitMap, &c_offsets);
-		commitResult = rd_kafka_commit(consumer, c_offsets, 0);
+    get_commit_offset_list(offsetCommitMap, &c_offsets);
+    commitResult = rd_kafka_commit(consumer, c_offsets, 0);
     rd_kafka_topic_partition_list_destroy(c_offsets);
-	  //TODO: Verify committed offset
+    //TODO: Verify committed offset
   }
   sleep (5);
-	rd_kafka_consumer_close(consumer);
-	rd_kafka_destroy(consumer);
+  rd_kafka_consumer_close(consumer);
+  rd_kafka_destroy(consumer);
   if (!autoCommitEnabled && commitResult != 0)
     return commitResult;
   else
-	  return stats->getMsgCount();
+    return stats->getMsgCount();
 }
 
 uint64_t Consumer::runTest (char *path, int nStreams, int nTopics, int nParts,

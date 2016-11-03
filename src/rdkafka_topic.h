@@ -166,6 +166,3 @@ void streams_populate_topic_partition_list (rd_kafka_t *rk,
 					    const int64_t *offsets,
 					    uint32_t topic_partition_size,
 					    rd_kafka_topic_partition_list_t *outList ) ;
-
-int streams_consumer_committed_wrapper (rd_kafka_t *rk,
-		                        rd_kafka_topic_partition_list_t *topics);

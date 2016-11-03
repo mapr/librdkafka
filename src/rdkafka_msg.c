@@ -84,18 +84,23 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	}
 
 	/* If we are to make a copy of the payload, allocate space for it too */
-	if (msgflags & RD_KAFKA_MSG_F_COPY) {
-		msgflags &= ~RD_KAFKA_MSG_F_FREE;
-		mlen += len;
-	}
-
+  if(!is_streams_producer(rkt->rkt_rk)) {
+	  if (msgflags & RD_KAFKA_MSG_F_COPY) {
+		  msgflags &= ~RD_KAFKA_MSG_F_FREE;
+		  mlen += len;
+	  }
+  }
 	/* Note: using rd_malloc here, not rd_calloc, so make sure all fields
 	 *       are properly set up. */
 	rkm = rd_malloc(mlen);
 	rkm->rkm_len        = len;
 	rkm->rkm_flags      = msgflags;
 	rkm->rkm_opaque     = msg_opaque;
-	rkm->rkm_key        = rd_kafkap_bytes_new(key, (int32_t) keylen);
+  if(!is_streams_producer(rkt->rkt_rk)) {
+     rkm->rkm_key        = rd_kafkap_bytes_new(key, (int32_t) keylen);
+  } else {
+    rkm->rkm_key          = key;
+  }
 	rkm->rkm_partition  = force_partition;
         rkm->rkm_offset     = 0;
 	rkm->rkm_timestamp  = utc_now / 1000;
@@ -109,8 +114,12 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 
 	if (payload && msgflags & RD_KAFKA_MSG_F_COPY) {
 		/* Copy payload to space following the ..msg_t */
-		rkm->rkm_payload = (void *)(rkm+1);
-		memcpy(rkm->rkm_payload, payload, len);
+    if(!is_streams_producer(rkt->rkt_rk)) {
+		  rkm->rkm_payload = (void *)(rkm+1);
+		  memcpy(rkm->rkm_payload, payload, len);
+    } else {
+      rkm->rkm_payload = payload;
+    }
 
 	} else {
 		/* Just point to the provided payload. */
@@ -205,6 +214,22 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         int good = 0;
         rd_kafka_resp_err_t all_err = 0;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+
+  if(rkt==NULL || rkt->rkt_topic == NULL || rkt->rkt_topic->str == NULL)
+    return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+
+  if (streams_is_valid_topic_name(rkt->rkt_topic->str)) {
+    if(rkt->rkt_rk->kafka_producer)
+      return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+
+    if (!is_streams_producer(rkt->rkt_rk))
+      streams_producer_create_wrapper(rkt->rkt_rk);
+
+    if (partition == RD_KAFKA_PARTITION_UA)
+      partition = INVALID_PARTITION_ID;
+
+
+  }
 
         /* For partitioner; hold lock for entire run,
          * for one partition: only acquire when needed at the end. */

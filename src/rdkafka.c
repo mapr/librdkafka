@@ -1326,7 +1326,10 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
     copyPayload = payload;
     copyKey = key;
   }
-
+  if (keylen!= 0)
+    copyKey =  rd_kafkap_bytes_new(key, (int32_t) keylen);
+  else
+    copyKey = key;
 	streams_producer_record_t record;
 	streams_producer_record_create(tp,
 				       (const char *)copyKey,
@@ -1586,11 +1589,35 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *app_rkt, int32_t partition) {
 
 
 
+rd_kafka_resp_err_t streams_rd_kafka_seek_wrapper (rd_kafka_itopic_t *rkt,
+                                                  int32_t partition,
+                                                  int64_t offset) {
+  streams_topic_partition_t tp;
+  int retVal = 0;
+  if (!is_streams_consumer (rkt->rkt_rk))
+      return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+  retVal = streams_topic_partition_create (rkt->rkt_topic->str,
+                                              partition, &tp);
+  if(retVal)
+     return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+
+  rd_kafka_q_purge (&(rkt->rkt_rk->rk_cgrp->rkcg_q));
+  retVal = streams_consumer_seek (rkt->rkt_rk->streams_consumer, tp, offset);
+
+  if(!retVal)
+      return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+  else
+      return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                                    int32_t partition,
                                    int64_t offset,
                                    int timeout_ms) {
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+        if(rkt==NULL || rkt->rkt_topic == NULL ||
+                            rkt->rkt_topic->str == NULL)
+              return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
         shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
         rd_kafka_q_t *tmpq = NULL;
@@ -1600,7 +1627,9 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 
 	if (partition == RD_KAFKA_PARTITION_UA)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
+  if( streams_is_valid_topic_name(rkt->rkt_topic->str)) {
+    err = streams_rd_kafka_seek_wrapper (rkt, partition, offset);
+  } else {
 	rd_kafka_topic_rdlock(rkt);
 	if (!(s_rktp = rd_kafka_toppar_get(rkt, partition, 0)) &&
 	    !(s_rktp = rd_kafka_toppar_desired_get(rkt, partition))) {
@@ -1628,7 +1657,9 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                 return err;
         }
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        err = RD_KAFKA_RESP_ERR_NO_ERROR;
+  }
+  return err;
 }
 
 
@@ -1978,16 +2009,50 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
         return err;
 }
 
+int streams_rd_kafka_committed_wrapper (rd_kafka_t *rk,
+          rd_kafka_topic_partition_list_t *topics) {
+      int streams_topic_count = 0;
+      int kafka_topic_count = 0;
+      int i;
+      for (i=0; i < topics->cnt; i++) {
+        const char *topic_name =  (topics->elems[i]).topic;
+        if (streams_is_valid_topic_name(topic_name)) {
 
+          streams_topic_partition_t tp;
+          streams_topic_partition_create(topic_name,
+                                    (topics->elems[i]).partition, &tp);
+          int64_t offset = 0;
+          streams_consumer_committed (rk->streams_consumer, tp, &offset);
+          (topics->elems[i]).offset = offset;
+          streams_topic_partition_destroy(tp);
+          streams_topic_count++;
+          } else {
+            kafka_topic_count++;
+          }
+
+        if (streams_topic_count!=0 && kafka_topic_count!=0)
+          return -1;
+      }
+
+      if (streams_topic_count > 0 )
+            return 0;
+      else if (kafka_topic_count > 0 )
+            return 1;
+      else
+            return -1;
+}
 
 rd_kafka_resp_err_t
 rd_kafka_committed (rd_kafka_t *rk,
 		    rd_kafka_topic_partition_list_t *partitions,
 		    int timeout_ms) {
+
+        if (!rk)
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_q_t *replyq;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
-	rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
@@ -1997,7 +2062,7 @@ rd_kafka_committed (rd_kafka_t *rk,
 						    RD_KAFKA_OFFSET_INVALID);
 
 	if (is_streams_consumer(rk)) {
-		int retVal = streams_consumer_committed_wrapper (rk, partitions);
+		int retVal = streams_rd_kafka_committed_wrapper (rk, partitions);
 		if (retVal == -1)
 			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC; //TODO return detailed error codes
 		else if (retVal == 0)
@@ -2046,35 +2111,74 @@ rd_kafka_committed (rd_kafka_t *rk,
 
 
 rd_kafka_resp_err_t
+streams_rd_kafka_position_wrapper (rd_kafka_t *rk,
+                            rd_kafka_topic_partition_list_t *partitions) {
+  rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+  int streams_topic_count = 0;
+  int kafka_topic_count = 0;
+  int i;
+  streams_topic_partition_t streams_tps[partitions->cnt];
+  for (i=0; i < partitions->cnt; i++) {
+    const char *topic_name =  (partitions->elems[i]).topic;
+    int64_t offset = RD_KAFKA_OFFSET_INVALID;
+    if (streams_is_valid_topic_name(topic_name)) {
+      streams_topic_partition_create(topic_name,(partitions->elems[i]).partition,
+                                                  &streams_tps[i]);
+      int32_t retVal = 0;
+      retVal = streams_consumer_position (rk->streams_consumer,
+                                             streams_tps[i], &offset);
+      if (!retVal )partitions->elems[i].offset = offset;
+      else err = RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+    } else {
+      kafka_topic_count++;
+    }
+
+    if (kafka_topic_count!=0) {
+        streams_topic_partition_free (streams_tps, streams_topic_count);
+        rd_kafka_topic_partition_list_reset_offsets(partitions,
+                RD_KAFKA_OFFSET_INVALID);
+        return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+    }
+  }
+  return err;
+}
+rd_kafka_resp_err_t
 rd_kafka_position (rd_kafka_t *rk,
 		   rd_kafka_topic_partition_list_t *partitions) {
 	int i;
-
+  rd_kafka_resp_err_t err;
+  if (!rk)
+    return RD_KAFKA_RESP_ERR__INVALID_ARG;
 	/* Set default offsets. */
 	rd_kafka_topic_partition_list_reset_offsets(partitions,
 						    RD_KAFKA_OFFSET_INVALID);
 
-	for (i = 0 ; i < partitions->cnt ; i++) {
-		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
-		shptr_rd_kafka_toppar_t *s_rktp;
-		rd_kafka_toppar_t *rktp;
+  if ( is_streams_consumer (rk)) {
+      err = streams_rd_kafka_position_wrapper (rk, partitions);
+  } else {
+	        for (i = 0 ; i < partitions->cnt ; i++) {
+		              rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+		              shptr_rd_kafka_toppar_t *s_rktp;
+		              rd_kafka_toppar_t *rktp;
 
-		if (!(s_rktp = rd_kafka_toppar_get2(rk, rktpar->topic,
-						    rktpar->partition, 0, 1))) {
-			rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-			rktpar->offset = RD_KAFKA_OFFSET_INVALID;
-			continue;
-		}
+		              if (!(s_rktp = rd_kafka_toppar_get2(rk, rktpar->topic,
+						                                  rktpar->partition, 0, 1))) {
+			                    rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                    			rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+			                    continue;
+		              }
 
-		rktp = rd_kafka_toppar_s2i(s_rktp);
-		rd_kafka_toppar_lock(rktp);
-		rktpar->offset = rktp->rktp_app_offset;
-		rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
-		rd_kafka_toppar_unlock(rktp);
-		rd_kafka_toppar_destroy(s_rktp);
-	}
+              		rktp = rd_kafka_toppar_s2i(s_rktp);
+		              rd_kafka_toppar_lock(rktp);
+		              rktpar->offset = rktp->rktp_app_offset;
+		              rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+		              rd_kafka_toppar_unlock(rktp);
+		              rd_kafka_toppar_destroy(s_rktp);
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                  err = RD_KAFKA_RESP_ERR_NO_ERROR;
+          }
+  }
+  return err;
 }
 
 

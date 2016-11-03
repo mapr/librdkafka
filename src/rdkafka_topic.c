@@ -1033,10 +1033,10 @@ int streams_get_topic_commit_info (rd_kafka_t *rk,
 		const char *topic_name = (topics->elems[i]).topic;
 		if (streams_is_valid_topic_name(topic_name)) {
 			streams_topic_partition_create (topic_name,
-							(topics->elems[i]).partition,
-							 &tp[streams_topic_count]);
+				(topics->elems[i]).partition,
+				 &tp[streams_topic_count]);
 			cursor[streams_topic_count] = (topics->elems[i]).offset;
-			streams_topic_count++;
+      streams_topic_count++;
 
 		} else {
 			kafka_topic_count++;
@@ -1068,7 +1068,7 @@ void streams_populate_topic_partition_list(rd_kafka_t *rk,
 	        char *topic_name;
 	        streams_topic_partition_get_topic_name (topic_partitions[i],
 							&topic_name);
-	        int32_t partition_id = 0;
+	        int32_t partition_id = RD_KAFKA_PARTITION_UA;
 	        streams_topic_partition_get_partition_id(topic_partitions[i],
 							 &partition_id);
 		rd_kafka_topic_partition_t *rkt = rd_kafka_topic_partition_list_add (outList,
@@ -1080,38 +1080,68 @@ void streams_populate_topic_partition_list(rd_kafka_t *rk,
 	}
 }
 
-int streams_consumer_committed_wrapper (rd_kafka_t *rk,
-					rd_kafka_topic_partition_list_t *topics) {
-	int streams_topic_count = 0;
-	int kafka_topic_count = 0;
-	int i;
+int streams_check_topic_name_is_valid (const char *topicName, uint32_t topicSz,
+                                       bool *isRegex) {
+  if (isRegex) *isRegex = false;
 
-	for (i=0; i < topics->cnt; i++) {
-		const char *topic_name =  (topics->elems[i]).topic;
-		if (streams_is_valid_topic_name(topic_name)) {
+  if (topicSz < 1 || topicSz > 255)
+    return -1;
 
-			streams_topic_partition_t tp;
-			streams_topic_partition_create(topic_name, (topics->elems[i]).partition, &tp);
-			int64_t offset = 0;
-			streams_consumer_committed (rk->streams_consumer, tp, &offset);
-			(topics->elems[i]).offset = offset;
+  if (((topicSz == 1) && (topicName[0] == '.')) ||
+      ((topicSz == 2) && (topicName[0] == '.') && (topicName[1] == '.'))) {
+    return -1;
+  }
+  uint32_t i ;
+  for (i = 0; i < topicSz; i++){
+    if (isalnum(topicName[i]) || topicName[i] == '.' ||
+        topicName[i] == '_' || topicName[i] == '-' ) {
+      continue;
+    } else {
+      if (isRegex) {
+        *isRegex = true;
+        return 0;
+      } else {
+        return -1;
+      }
+    }
+  }
 
-			streams_topic_partition_destroy(tp);
-			streams_topic_count++;
-		} else {
-			kafka_topic_count++;
-		}
+  return 0;
+}
 
-		if (streams_topic_count!=0 && kafka_topic_count!=0)
-			return -1;
-	}
+int streams_check_full_path_is_valid(const char *fullPath,
+                     uint32_t pathSize,
+                     bool *isRegex) {
+  if (isRegex) *isRegex = false;
+  if (pathSize < 1 || fullPath[0] != '/')
+      return -1;
 
-	if (streams_topic_count > 0 )
-		return 0;
-	else if (kafka_topic_count > 0 )
-		return 1;
-        else
-		return -1;
+  uint32_t slashIdx = 0;
+  uint32_t colonIdx = 0;
+  // Look for the last '/' and first ':' after the last '/'l
+  uint32_t i ;
+  for ( i = pathSize - 1 ; i > 0; --i) {
+    char curChar = fullPath[i];
+    if (curChar == ':') {
+      colonIdx = i;
+    } else if (curChar == '/') {
+      slashIdx = i;
+      break;
+    }
+  }
+
+  if (colonIdx == 0 || colonIdx - slashIdx <= 1)
+    return -1;
+
+  uint32_t topicLen = pathSize - colonIdx - 1;
+  char topicName[topicLen + 1];
+  memcpy( topicName, &fullPath[colonIdx +1], topicLen );
+  topicName[topicLen +1] = '\0';
+  int err = streams_check_topic_name_is_valid(topicName, topicLen, isRegex);
+  if (err)
+    return err;
+
+  return 0;
 }
 
 int streams_check_topic_name_is_valid (const char *topicName, uint32_t topicSz,

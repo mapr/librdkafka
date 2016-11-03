@@ -15,13 +15,16 @@ class ProducerTest {
     static int runProducerCombinationTest(char *path,
                                               int nstreams, int ntopics,
                                               int nparts, int nmsgs,
-                                              int nproducers, int msgsize,
+                                              int nproducers, int msgsize, int flag,
                                               bool roundRb, int slowtopics,
                                               bool print, uint64_t timeout,
                                               uint64_t *numCallbacks);
     static int runProducerMixedTopicTest(char * strName, int type);
     static int runProducerErrorTest(char * strName, int numMsgs,
                                     bool streamDelete);
+    static int runProducerBatchTest (const char *strName, char *topicName,
+                                     int startPartId, int numPart, int msgFlags,
+                                     int totalMsgs);
 };
 #endif
 

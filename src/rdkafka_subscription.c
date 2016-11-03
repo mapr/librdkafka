@@ -147,11 +147,9 @@ void streams_consumer_create_wrapper(rd_kafka_t *rk) {
 	//create streams config
 	streams_config_t config;
 	streams_config_create(&config);
-
 	char *group_id = (rk->rk_conf).group_id->str;
 	if (group_id == NULL) {
-		return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
-
+		return;
   }
 
 	streams_config_set(config, "group.id", group_id);
@@ -175,9 +173,6 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 																		bool *is_kafka_subscribe) {
 	*is_kafka_subscribe = false;
 	char **streams_topics = rd_malloc(topics->cnt * sizeof(char*));
-	/* TODO: free streams_topics should this be saved under
-	 * rk->cgrp->assignment/subscriptions ?
-	 */
 	int tcount = topics->cnt;
 	int topic_validity = streams_get_topic_names(topics,
 				streams_topics,
@@ -236,7 +231,7 @@ rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
 		    const rd_kafka_topic_partition_list_t *topics) {
   if(!rk)
-     RD_KAFKA_RESP_ERR__INVALID_ARG;
+     return RD_KAFKA_RESP_ERR__INVALID_ARG;
 	rd_kafka_resp_err_t err;
   rd_kafka_op_t *rko;
   rd_kafka_cgrp_t *rkcg;
@@ -259,82 +254,197 @@ rd_kafka_subscribe (rd_kafka_t *rk,
   return err;
 }
 
+rd_kafka_resp_err_t
+streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
+                                const rd_kafka_topic_partition_list_t *topics,
+                                bool *is_kafka_assign) {
+  *is_kafka_assign = false;
+  rd_kafka_resp_err_t err = 0;
+  int streams_topic_count = 0;
+  int kafka_topic_count = 0;
+  int i;
+  streams_topic_partition_t *streams_tps =
+           rd_malloc(topics->cnt * sizeof(streams_topic_partition_t));
+  //streams_topic_partition_t streams_tps[topics->cnt];
+  for (i=0; i < topics->cnt; i++) {
+    const char *topic_name =  (topics->elems[i]).topic;
+    if (streams_is_valid_topic_name(topic_name)) {
+
+      streams_topic_partition_create(topic_name, (topics->elems[i]).partition,
+                                                  &streams_tps[i]);
+      streams_topic_count++;
+    } else {
+      kafka_topic_count++;
+    }
+
+    if (streams_topic_count!=0 && kafka_topic_count!=0) {
+        streams_topic_partition_free (streams_tps, streams_topic_count);
+        return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+    }
+  }
+
+  if (streams_topic_count > 0 ) {
+      if (rk->kafka_consumer) {
+          streams_topic_partition_free (streams_tps, streams_topic_count);
+          return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+      }
+      //all streams topics
+      if(!is_streams_consumer(rk)) {
+          streams_consumer_create_wrapper (rk);
+      }
+
+      err = streams_consumer_assign_partitions (rk->streams_consumer,
+                                        streams_tps, streams_topic_count);
+      streams_topic_partition_free (streams_tps, streams_topic_count);
+      return err;
+  } else if (kafka_topic_count > 0 ) {
+      streams_topic_partition_free (streams_tps, streams_topic_count);
+      *is_kafka_assign = true;
+      return 1;
+  } else {
+    return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+  }
+
+}
 
 rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *partitions) {
+        if (!rk)
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
-
+        rd_kafka_resp_err_t err;
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+        bool is_kafka_assign = false;
 
-        rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
-	if (partitions)
+        err = streams_rd_kafka_assign_wrapper (rk, partitions, &is_kafka_assign);
+        if(is_kafka_assign) {
+
+          if ( is_streams_consumer(rk))
+              return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+
+          rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
+          if (partitions)
                 rd_kafka_op_payload_set(
                         rko,
                         rd_kafka_topic_partition_list_copy(partitions),
-			(void *)rd_kafka_topic_partition_list_destroy);
+                        (void *)rd_kafka_topic_partition_list_destroy);
 
-        return rd_kafka_op_err_destroy(
+          return rd_kafka_op_err_destroy(
                 rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+        }
+        return err;
 }
 
+rd_kafka_resp_err_t
+streams_rd_kafka_assignment_wrapper (rd_kafka_t *rk,
+                     rd_kafka_topic_partition_list_t **partitions) {
+        if (!is_streams_consumer (rk))
+           return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
+        uint32_t tCount = 0;
+        streams_topic_partition_t *tps;
+        int32_t ret = 0;
+        ret = streams_consumer_get_assignment (rk->streams_consumer, &tps, &tCount);
+        if(!*partitions)
+              *partitions = rd_kafka_topic_partition_list_new(0);
+        if(!ret) {
+            streams_populate_topic_partition_list (rk, tps, NULL,
+                                                  tCount, *partitions );
+              return RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+          //TODO: return correct error after mapping is implemented
+              return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        }
+}
 
 rd_kafka_resp_err_t
 rd_kafka_assignment (rd_kafka_t *rk,
                      rd_kafka_topic_partition_list_t **partitions) {
+
+        if (!rk)
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+        if (is_streams_consumer (rk)) {
+          err = streams_rd_kafka_assignment_wrapper (rk, partitions);
+        } else {
+          rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_ASSIGNMENT);
+            if (!rko)
+              return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
-        rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_ASSIGNMENT);
-	if (!rko)
-		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+          err = rko->rko_err;
 
-        err = rko->rko_err;
+          *partitions = rko->rko_payload;
+          rko->rko_payload = NULL;
+          rd_kafka_op_destroy(rko);
 
-        *partitions = rko->rko_payload;
-        rko->rko_payload = NULL;
-        rd_kafka_op_destroy(rko);
-
-        if (!*partitions && !err) {
-                /* Create an empty list for convenience of the caller */
-                *partitions = rd_kafka_topic_partition_list_new(0);
+          if (!*partitions && !err) {
+                  /* Create an empty list for convenience of the caller */
+                  *partitions = rd_kafka_topic_partition_list_new(0);
+          }
         }
-
         return err;
+}
+
+rd_kafka_resp_err_t
+streams_rd_kafka_subscription_wrapper (rd_kafka_t *rk,
+                               rd_kafka_topic_partition_list_t **topics) {
+  char **streams_topics;
+  uint32_t tcount = 0;
+
+  rd_kafka_resp_err_t err =   streams_consumer_get_subscription (rk->streams_consumer,
+                                     &streams_topics, &tcount );
+  if(!*topics)
+    *topics = rd_kafka_topic_partition_list_new(0);
+  if (!err) {
+    uint32_t i = 0;
+    for (i = 0; i < tcount ; i++) {
+      rd_kafka_topic_partition_list_add
+        (*topics, streams_topics[i], RD_KAFKA_PARTITION_UA);
+    }
+  }
+  return err;
 }
 
 rd_kafka_resp_err_t
 rd_kafka_subscription (rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t **topics){
-	rd_kafka_op_t *rko;
+        if(!rk)
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (rk->rk_type != RD_KAFKA_CONSUMER)
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_SUBSCRIPTION);
-	if (!rko)
-		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+        if (is_streams_consumer(rk)) {
+                err = streams_rd_kafka_subscription_wrapper (rk, topics);
+        } else {
+          rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_SUBSCRIPTION);
+          if (!rko)
+            return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
-        err = rko->rko_err;
+          err = rko->rko_err;
 
-        *topics = rko->rko_payload;
-        rko->rko_payload = NULL;
-        rd_kafka_op_destroy(rko);
+          *topics = rko->rko_payload;
+          rko->rko_payload = NULL;
+          rd_kafka_op_destroy(rko);
 
-        if (!*topics && !err) {
+          if (!*topics && !err) {
                 /* Create an empty list for convenience of the caller */
                 *topics = rd_kafka_topic_partition_list_new(0);
+          }
         }
-
         return err;
 }
 

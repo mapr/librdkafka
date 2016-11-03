@@ -33,6 +33,7 @@
 #include "../producer/ProducerTest.cc"
 
 char *STREAM ="/gtest-ProducerTest";
+char *STREAM_BATCH ="/gtest-BatchProduceTest";
 uint64_t numCallbacks;
 uint64_t expectedCb;
 
@@ -70,7 +71,7 @@ void msg_produce_test_case (const char* strName, int partnId,
 void combination_test (char* strName, int numStr,
                        int numTopics, int numPartition,
                        int numMsgsPerPartition, int numProducers,
-                       int msgSize, bool roundRobin, int slowTopics,
+                       int msgSize, int flag, bool roundRobin, int slowTopics,
                        bool printStats, uint64_t timeout){
     init();
     expectedCb = numStr * numPartition * numProducers *
@@ -81,13 +82,23 @@ void combination_test (char* strName, int numStr,
     EXPECT_EQ (SUCCESS, ProducerTest::runProducerCombinationTest(strName,
                                         numStr, numTopics, numPartition,
                                         numMsgsPerPartition, numProducers,
-                                        msgSize, roundRobin, slowTopics,
+                                        msgSize, flag, roundRobin, slowTopics,
                                         printStats, timeout, &numCallbacks));
     EXPECT_EQ (expectedCb, numCallbacks);
     EXPECT_EQ (expectedCb, stream_count_check(strName, numStr));
     EXPECT_EQ (SUCCESS, stream_delete(strName, numStr));
 }
 
+void produce_batch_test (char* strName, char *topicName, int startPartId,
+                         int numPartition, int flag, int totalMsgs){
+    ASSERT_EQ (0, stream_create (strName, 1/*Num of Streams*/,
+                                 numPartition/*Default Partitions*/));
+    EXPECT_EQ (totalMsgs, ProducerTest::runProducerBatchTest(strName,
+                                        topicName, startPartId, numPartition,
+                                        flag, totalMsgs));
+    EXPECT_EQ (totalMsgs, stream_count_check(strName, 1));
+    //EXPECT_EQ (SUCCESS, stream_delete(strName, 1));
+}
 /*-----------------------------------------------*/
 /*Producer Create Tests*/
 /*-----------------------------------------------*/
@@ -168,14 +179,16 @@ TEST(ProducerTest, msgProducerKafkaProducerMaprTopicTest) {
 TEST(ProducerTest, testSendOneSmallMessageSingleStream) {
   combination_test (STREAM, 1/*# of streams*/, 1/*# of topics*/,
                     1/*# of partn per topic*/, 1/*# of msgs per partition*/,
-                    1/*numProducer*/,200/*Msg size*/, true/*Round Robin*/,
+                    1/*numProducer*/,200/*Msg size*/, RD_KAFKA_MSG_F_COPY/*flag*/,
+                    true/*Round Robin*/,
                     0/*Slow Topics*/, false/*Print*/,
                     45 * 1000/*pollWaitTimeOutMS*/);
 }
 TEST(ProducerTest, testSendOneMediumMessageSingleStream) {
   combination_test (STREAM, 1/*# of streams*/, 1/*# of topics*/,
                     1/*# of partn per topic*/, 1/*# of msgs per partition*/,
-                    1/*numProducer*/,9*1024*1024/10/*Msg size*/, true/*rr*/,
+                    1/*numProducer*/,9*1024*1024/10/*Msg size*/,
+                    RD_KAFKA_MSG_F_COPY/*flag*/, true/*rr*/,
                     0/*Slow Topics*/, false/*Print*/,
                     45 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -183,7 +196,18 @@ TEST(ProducerTest, testSendTenTopicsMediumMessageSingleStream) {
   combination_test (STREAM, 1/*# of streams*/, 10/*# of topics*/,
                     2/*# of partn per topic*/,
                     10/*# of msgs per partition*/, 1/*numProducer*/,
-                    9*1024*1024/10/*Msg size*/, true/*Round Robin*/,
+                    9*1024*1024/10/*Msg size*/,
+                    RD_KAFKA_MSG_F_COPY/*flag*/, true/*Round Robin*/,
+                    0/*Slow Topics*/, false/*Print*/,
+                    45 * 1000/*pollWaitTimeOutMS*/);
+}
+
+TEST(ProducerTest, testSendTenTopicsMediumMessageMsgFreeSingleStream) {
+  combination_test (STREAM, 1/*# of streams*/, 10/*# of topics*/,
+                    2/*# of partn per topic*/,
+                    10/*# of msgs per partition*/, 1/*numProducer*/,
+                    9*1024*1024/10/*Msg size*/,
+                    RD_KAFKA_MSG_F_FREE/*flag*/, true/*Round Robin*/,
                     0/*Slow Topics*/, false/*Print*/,
                     45 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -191,7 +215,8 @@ TEST(ProducerTest, testSendTenTopicsMediumMessageSingleStream) {
 TEST(ProducerTest, DISABLED_testSendThousandTopicsSmallMessageSingleStream) {
   combination_test (STREAM, 1/*# of streams*/, 1000/*# of topics*/,
                     10/*# of partn per topic*/, 1000/*# of msgs per partn*/,
-                    1/*numProducer*/,200/*Msg size*/, true/*rr*/,
+                    1/*numProducer*/,200/*Msg size*/,
+                    RD_KAFKA_MSG_F_COPY/*flag*/, true/*rr*/,
                     0/*Slow Topics*/, false/*Print*/,
                     60 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -199,7 +224,8 @@ TEST(ProducerTest, DISABLED_testSendThousandTopicsSmallMessageSingleStream) {
 TEST(ProducerTest, testMixedSpeedTopics) {
   combination_test (STREAM, 1/*# of streams*/, 100/*# of topics*/,
                     1/*# of partn per topic*/, 10000/*# of msgs per partn*/,
-                    1/*numProducer*/, 200/*Msg size*/, true/*Round Robin*/,
+                    1/*numProducer*/, 200/*Msg size*/,
+                    RD_KAFKA_MSG_F_COPY/*flag*/, true/*Round Robin*/,
                     10/*Slow Topics*/, false/*Print*/,
                     60 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -210,7 +236,8 @@ TEST(ProducerTest, testMixedSpeedTopics) {
 TEST(ProducerTest, testTenProducerSmallMessageSingleStream) {
   combination_test (STREAM, 1/*# of streams*/, 2/*# of topics*/,
                         5/*# of partn per topic*/, 1000/*# of msgs per partn*/,
-                        10/*numProducer*/, 200/*Msg size*/, true/*Round Robin*/,
+                        10/*numProducer*/, 200/*Msg size*/, RD_KAFKA_MSG_F_COPY/*flag*/,
+                        true/*Round Robin*/,
                         0/*Slow Topics*/, false/*Print*/,
                         60 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -218,14 +245,16 @@ TEST(ProducerTest, testTenProducerSmallMessageSingleStream) {
 TEST(ProducerTest, testTenProducerSmallMessageMultiStream) {
   combination_test (STREAM, 10/*# of streams*/, 2/*# of topics*/,
                         5/*# of partn per topic*/, 1000/*# of msgs per partn*/,
-                        10/*numProducer*/, 200/*Msg size*/, true/*Round Robin*/,
+                        10/*numProducer*/, 200/*Msg size*/,
+                        RD_KAFKA_MSG_F_COPY/*flag*/, true/*Round Robin*/,
                         0/*Slow Topics*/, false/*Print*/,
                         60 * 1000/*pollWaitTimeOutMS*/);
 }
 TEST(ProducerTest, testHundredProducerSmallMessageSingleStream) {
   combination_test (STREAM, 1/*# of streams*/, 2/*# of topics*/,
                         5/*# of partn per topic*/, 1000/*# of msgs per partn*/,
-                        100/*numProducer*/, 200/*Msg size*/, true/*Round Robin*/,
+                        100/*numProducer*/, 200/*Msg size*/,
+                        RD_KAFKA_MSG_F_COPY/*flag*/, true/*Round Robin*/,
                         0/*Slow Topics*/, false/*Print*/,
                         60 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -233,7 +262,24 @@ TEST(ProducerTest, testHundredProducerSmallMessageSingleStream) {
 TEST(ProducerTest, testHundredProducerSmallMessageMultiStream) {
   combination_test (STREAM, 5/*# of streams*/, 10/*# of topics*/,
                         5/*# of partn per topic*/, 100/*# of msgs per partn*/,
-                        100/*numProducer*/, 200/*Msg size*/, true/*Round Robin*/,
+                        100/*numProducer*/, 200/*Msg size*/,
+                        RD_KAFKA_MSG_F_COPY/*flag*/, true/*Round Robin*/,
+                        0/*Slow Topics*/, false/*Print*/,
+                        60 * 1000/*pollWaitTimeOutMS*/);
+}
+TEST(ProducerTest, testHundredProducerSmallMessageMsgFreeMultiStream) {
+  combination_test (STREAM, 5/*# of streams*/, 10/*# of topics*/,
+                        5/*# of partn per topic*/, 100/*# of msgs per partn*/,
+                        100/*numProducer*/, 200/*Msg size*/,
+                        RD_KAFKA_MSG_F_FREE/*flag*/, true/*Round Robin*/,
+                        0/*Slow Topics*/, false/*Print*/,
+                        60 * 1000/*pollWaitTimeOutMS*/);
+}
+TEST(ProducerTest, testHundredProducerSmallMessageMsgCopyMultiStream) {
+  combination_test (STREAM, 5/*# of streams*/, 10/*# of topics*/,
+                        5/*# of partn per topic*/, 100/*# of msgs per partn*/,
+                        100/*numProducer*/, 200/*Msg size*/,
+                        RD_KAFKA_MSG_F_COPY/*flag*/, true/*Round Robin*/,
                         0/*Slow Topics*/, false/*Print*/,
                         60 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -241,14 +287,16 @@ TEST(ProducerTest, testHundredProducerSmallMessageMultiStream) {
 TEST(ProducerTest, DISABLED_testHundredProducerMixedSpeedTopicMultiStream) {
   combination_test (STREAM, 5/*# of streams*/, 2/*# of topics*/,
                         5/*# of partn per topic*/, 10000/*# of msgs per partn*/,
-                        100/*numProducer*/, 200/*Msg size*/, true/*Round Robin*/,
+                        100/*numProducer*/, 200/*Msg size*/,
+                        RD_KAFKA_MSG_F_FREE/*flag*/, true/*Round Robin*/,
                         10/*Slow Topics*/, false/*Print*/,
                         60 * 1000/*pollWaitTimeOutMS*/);
 }
-TEST(ProducerTest, testThousandProducerSmallMsgMultiStream) {
+TEST(ProducerTest, DISABLED_testThousandProducerSmallMsgMultiStream) {
   combination_test (STREAM, 3/*# of streams*/, 4/*# of topics*/,
                         5/*# of partn per topic*/, 100/*# of msgs per partn*/,
-                        1000/*numProducer*/, 200/*Msg size*/, true/*Round Robin*/,
+                        1000/*numProducer*/, 200/*Msg size*/,
+                        RD_KAFKA_MSG_F_FREE/*flag*/, true/*Round Robin*/,
                         0/*Slow Topics*/, false/*Print*/,
                         60 * 1000/*pollWaitTimeOutMS*/);
 }
@@ -269,6 +317,28 @@ TEST(ProducerTest, DISABLED_msgProduceTopicDeleteTest) {
   ASSERT_EQ (RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
             ProducerTest::runProducerErrorTest(STREAM, 10000, false));
   EXPECT_EQ (SUCCESS, stream_delete(STREAM, 1));
+}
+/*----------------------------------------------*/
+/* Produce batch test*/
+/*-----------------------------------------------*/
+TEST (ProducerTest, produceBatchDefaultTest) {
+  produce_batch_test (STREAM_BATCH, "topic"/*topic name*/, 0/*start partition id*/,
+   4/* num of partitions*/, RD_KAFKA_MSG_F_COPY/*flag*/, 10000/*# of total msgs*/);
+}
+
+TEST (ProducerTest, produceBatchMsgFreeTest) {
+  produce_batch_test (STREAM_BATCH, "topic"/*topic name*/, 0/*start partition id*/,
+   4/* num of partitions*/, RD_KAFKA_MSG_F_FREE/*flag*/, 10000/*# of total msgs*/);
+}
+
+TEST (ProducerTest, produceBatchUnknownPartitionMsgCopyTest) {
+  produce_batch_test (STREAM_BATCH, "topic"/*topic name*/, -1/*start partition id*/,
+   4/* num of partitions*/, RD_KAFKA_MSG_F_COPY/*flag*/, 10000/*# of total msgs*/);
+}
+
+TEST (ProducerTest, produceBatchUnknownPartitionMsgFreeTest) {
+  produce_batch_test (STREAM_BATCH, "topic"/*topic name*/, -1/*start partition id*/,
+   4/* num of partitions*/, RD_KAFKA_MSG_F_FREE/*flag*/, 10000/*# of total msgs*/);
 }
 
 int main (int argc, char **argv) {

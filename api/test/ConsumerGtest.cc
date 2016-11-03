@@ -107,70 +107,123 @@ TEST(ConsumerTest, consumerCreateInvalidArgTest) {
 }
 
 /*-----------------------------------------------*/
-/*Consumer Subscribe Tests*/
+/*Consumer Subscribe/Subscription Tests*/
 /*-----------------------------------------------*/
 
 TEST_F(SubscribeTest, maprConsumerDefaultSubscribeTest) {
-  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, true,
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 1, 1, 1, true,
                                                      0, 0, "ConsumerTest", false ));
 }
 TEST_F(SubscribeTest, kafkaConsumerDefaultSubscribeTest) {
-  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, true,
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
                                                      0, 1, "ConsumerTest", false ));
 }
 TEST_F(SubscribeTest, maprConsumerInvalidTypeSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
-      ConsumerTest::runSubscribeTest (strName,1, 1, false,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
                                       0, 0, "ConsumerTest", false ));
 }
 TEST_F(SubscribeTest, kafkaConsumerInvalidTypeSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
-      ConsumerTest::runSubscribeTest (strName,1, 1, false,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
                                       0, 1, "ConsumerTest", false ));
 }
 TEST_F(SubscribeTest, maprConsumerInvalidGroupSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
-      ConsumerTest::runSubscribeTest (strName,1, 1, true,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
                                       0, 0, NULL, false ));
 }
 TEST_F(SubscribeTest, kafkaConsumerInvalidGroupSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
-      ConsumerTest::runSubscribeTest (strName,1, 1, true,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
                                       0, 1, NULL, false ));
 }
 TEST_F(SubscribeTest, maprConsumerMaprTopicSubscribeTest) {
-  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,2, 2, true,
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
                                                      1, 0, "ConsumerTest", false));
 }
 TEST_F(SubscribeTest, maprConsumerKafkaTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
-      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+      ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      1, 1, "ConsumerTest", false));
 }
 TEST_F(SubscribeTest, maprConsumerMixedTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
-      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+      ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      1, 2, "ConsumerTest", false));
 }
 TEST_F(SubscribeTest, kafkaConsumerKafkaTopicSubscribeTest) {
-  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,2, 2, true,
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      2, 1, "ConsumerTest", false));
 }
 TEST_F(SubscribeTest, kafkaConsumerMaprTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
-      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+      ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      2, 0, "ConsumerTest", false));
 }
 TEST_F(SubscribeTest, kafkaConsumerMixedTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
-      ConsumerTest::runSubscribeTest (strName,2, 2, true,
+      ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      2, 2, "ConsumerTest", false));
 }
+
+/*-----------------------------------------------*/
+/*Consumer Assign/Assignment Tests*/
+/*-----------------------------------------------*/
+
+TEST_F(SubscribeTest, maprConsumerDefaultAssignTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 1, 1, 1, true,
+                                                     0, 0, "ConsumerTest", true));
+}
+TEST_F(SubscribeTest, kafkaConsumerDefaultAssignTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
+                                                     0, 1, "ConsumerTest", true));
+}
+TEST_F(SubscribeTest, maprConsumerInvalidTypeAssignTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
+                                      0, 0, "ConsumerTest", true));
+}
+TEST_F(SubscribeTest, kafkaConsumerInvalidTypeAssignTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
+                                      0, 1, "ConsumerTest", true));
+}
+TEST_F(SubscribeTest, maprConsumerInvalidGroupAssignTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
+                                      0, 0, NULL, true));
+}
+TEST_F(SubscribeTest, kafkaConsumerInvalidGroupAssignTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+      ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
+                                      0, 1, NULL, true));
+}
+TEST_F(SubscribeTest, maprConsumerMaprTopicAssignTest) {
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
+                                                     1, 0, "ConsumerTest", true));
+}
+TEST_F(SubscribeTest, DISABLED_maprConsumerKafkaTopicAssignTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+      ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
+                                      2, 1, "ConsumerTest", true));
+}
+TEST_F(SubscribeTest, kafkaConsumerMaprTopicAssignTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+      ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
+                                      2, 0, "ConsumerTest", true));
+}
+TEST_F(SubscribeTest, kafkaConsumerMixedTopicAssignTest) {
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+      ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
+                                      2, 2, "ConsumerTest", true));
+}
+
 /*-----------------------------------------------*/
 /*Consumer Poll Tests*/
 /*-----------------------------------------------*/
 TEST(ConsumerTest, consumerPollSingleMsgTest) {
-  consumer_poll_test_case (STREAM_POLL,1/**/, 1, 1, 1, 200,
+  consumer_poll_test_case (STREAM_POLL,1, 1, 1, 1, 200,
                            RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
                            "consumerPollSingleMsgTestGr", true, true, false );
 }
@@ -185,7 +238,7 @@ TEST(ConsumerTest, consumerPollMediumSizeMsgTest) {
                              "consumerPollMediumMsgTestGr", true, true, false );
 }
 /*  librdkafka default msg size : 1000000
- *  Fix after config api is done
+ *  TODO: Fix after config api is done
  */
 TEST(ConsumerTest, DISABLED_consumerPollLargeSizeMsgTest) {
     consumer_poll_test_case (STREAM_POLL, 2, 4, 2, 100, 1*1024*1024,
@@ -202,11 +255,22 @@ TEST(ConsumerTest, consumerPollVerifyOrderCommitTest) {
                            RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
                            "consumerPollVerifyOrderTestGr", true, false, false );
 }
-TEST(ConsumerTest, DISABLED_consumerPollVerifyOrderMsgFreeTest) {
+TEST(ConsumerTest, consumerPollVerifyOrderMsgFreeTest) {
   consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200,
                            RD_KAFKA_MSG_F_FREE, true, 0, false, 30,
                            "consumerPollVerifyOrderMsgFreeTestGr", true, true, true );
 }
+TEST(ConsumerTest, consumerSubscribeCommitTest) {
+  consumer_poll_test_case (STREAM_POLL,1, 4, 2, 1000, 200,
+                           RD_KAFKA_MSG_F_COPY, true, 0, true, 30,
+                           "consumerSubscribeGr", true, false, true );
+}
+TEST(ConsumerTest, consumerAssignCommitTest) {
+  consumer_poll_test_case (STREAM_POLL,1, 4, 2, 10, 200,
+                           RD_KAFKA_MSG_F_COPY, true, 0, true, 30,
+                           "consumerAssignGr", false, false, true );
+}
+
 /*-----------------------------------------------*/
 /*Consumer Offset Commit Test*/
 /*-----------------------------------------------*/
@@ -269,6 +333,13 @@ TEST (ConsumerTest, backToBackTest) {
   EXPECT_EQ (0, ConsumerTest::runConsumerBack2BackTest(STREAM_COMBINATION));
 }
 
+/*-----------------------------------------------*/
+/*Consumer seek-position combination test*/
+/*-----------------------------------------------*/
+TEST (ConsumerTest, DISABLED_seekPositionTest) {
+  ASSERT_EQ (0, stream_create(STREAM_COMBINATION, 1, 1));
+  ConsumerTest::runConsumerSeekPositionTest(STREAM_COMBINATION, "seekPositionGr");
+}
 
 int main (int argc, char **argv) {
   testing::InitGoogleTest (&argc, argv);

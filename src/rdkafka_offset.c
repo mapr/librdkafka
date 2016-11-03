@@ -577,7 +577,7 @@ streams_rd_kafka_commit_wrapper (rd_kafka_t *rk,
                                 const rd_kafka_topic_partition_list_t *offsets,
                                 int async,
                                 bool *is_kafka_commit) {
-	*is_kafka_commit = false;
+  *is_kafka_commit = false;
 	if (offsets == NULL) {
 		if (is_streams_consumer(rk)) {
 			streams_consumer_commit_all_sync(
@@ -681,6 +681,8 @@ rd_kafka_commit (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                          int async) {
+        if (!rk)
+           return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
         rd_kafka_resp_err_t err;
