@@ -207,7 +207,6 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                             int msgflags,
                             rd_kafka_message_t *rkmessages, int message_cnt) {
-        rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
         int i;
 	rd_ts_t utc_now = rd_uclock();
         rd_ts_t now = rd_clock();
@@ -228,14 +227,26 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
     if (partition == RD_KAFKA_PARTITION_UA)
       partition = INVALID_PARTITION_ID;
 
+    for (i = 0 ; i < message_cnt ; i++) {
+      all_err = streams_producer_send_wrapper(rkt, partition, msgflags,
+                                        rkmessages[i].key,
+                                        rkmessages[i].key_len,
+                                        rkmessages[i].payload,
+                                        rkmessages[i].len,
+                                        rkmessages[i]._private);
 
-  }
+      if (!all_err)
+        good++;
+    }
+    return good;
+  } else {
 
         /* For partitioner; hold lock for entire run,
          * for one partition: only acquire when needed at the end. */
 	if (partition == RD_KAFKA_PARTITION_UA)
 		rd_kafka_topic_rdlock(rkt);
 
+        rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
         for (i = 0 ; i < message_cnt ; i++) {
                 rd_kafka_msg_t *rkm;
 
@@ -324,8 +335,8 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         }
 
 	rd_kafka_topic_rdunlock(rkt);
-
-        return good;
+    }
+    return good;
 }
 
 /**
