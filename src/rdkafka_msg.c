@@ -223,7 +223,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
   if(rkt==NULL || rkt->rkt_topic == NULL || rkt->rkt_topic->str == NULL)
     return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
-  if (streams_is_valid_topic_name(rkt->rkt_topic->str)) {
+  if (streams_is_valid_topic_name(rkt->rkt_topic->str, NULL)) {
     if(rkt->rkt_rk->kafka_producer)
       return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 

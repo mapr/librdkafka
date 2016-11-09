@@ -631,7 +631,8 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
         int old_state;
 
 	/* Ignore topics in blacklist */
-        if (rd_kafka_pattern_match(&rkb->rkb_rk->rk_conf.topic_blacklist,
+        if (rkb->rkb_rk->rk_conf.topic_blacklist &&
+	    rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
                                    mdt->topic)) {
                 rd_rkb_dbg(rkb, TOPIC, "BLACKLIST",
                            "Ignoring blacklisted topic \"%s\" in metadata",
@@ -957,11 +958,11 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
         return rd_kafka_topic_a2i(app_rkt)->rkt_conf.opaque;
 }
 
-bool streams_is_valid_topic_name (const char * topic_name) {
+bool streams_is_valid_topic_name (const char * topic_name, bool *isRegex) {
   if(!topic_name)
     return false;
   if(streams_check_full_path_is_valid (topic_name, strlen(topic_name),
-                                        NULL/*isRegex*/) == 0)
+                                        isRegex) == 0)
     return true;
   return false;
 }
@@ -969,8 +970,9 @@ bool streams_is_valid_topic_name (const char * topic_name) {
 void streams_topic_free (char **streams_topics,
 			 int num_topics) {
 	int i;
-	for(i=0; i< num_topics; i++)
-		rd_free((void *)streams_topics[i]);
+	for(i=0; i< num_topics; i++) {
+    rd_free((void *)streams_topics[i]);
+  }
 
 	rd_free(streams_topics);
 }
@@ -983,7 +985,7 @@ int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 	int i;
   for (i=0; i < topics->cnt; i++) {
 		const char *topic_name =  (topics->elems[i]).topic;
-		if (streams_is_valid_topic_name(topic_name)) {
+		if (streams_is_valid_topic_name(topic_name, NULL)) {
 			streams_topics[streams_topic_count] = rd_strndup(topic_name,
 									 strlen(topic_name));
 			streams_topic_count++;
@@ -1009,6 +1011,70 @@ int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 	}
 }
 
+int streams_get_regex_topic_names (rd_kafka_t *rk,
+                                   const rd_kafka_topic_partition_list_t *topics,
+                                   char ***streams_topics, char ***regex_topics,
+                                   int *streams_count, int*regex_count) {
+  int streams_topic_count = 0;
+  int kafka_topic_count = 0;
+  int regex_topic_count = 0;
+  int i;
+  char **temp_topics = *streams_topics;
+  char **temp_reg_topics = *regex_topics;
+  for (i=0; i < topics->cnt; i++) {
+    const char *topic_name =  (topics->elems[i]).topic;
+    bool isRegex = false;
+    if (streams_is_valid_topic_name(topic_name, &isRegex)) {
+        if(isRegex) {
+          char **reg_temp_ptr = rd_realloc(temp_reg_topics,
+                                          (regex_topic_count+1)* sizeof(char *));
+          if (reg_temp_ptr)
+            temp_reg_topics = reg_temp_ptr;
+          else
+            continue;
+          temp_reg_topics[regex_topic_count] = rd_strndup(topic_name,
+                                                    strlen(topic_name));
+          regex_topic_count++;
+        } else {
+          if (rk->rk_conf.topic_blacklist &&
+              rd_kafka_pattern_match(rk->rk_conf.topic_blacklist, topic_name))
+              continue;
+          size_t size = (streams_topic_count+1)*sizeof(char *);
+          char **temp_ptr = rd_realloc(temp_topics, size);
+          if (temp_ptr )
+            temp_topics = temp_ptr;
+          else
+            continue;
+          temp_topics[streams_topic_count] = rd_strndup(topic_name,
+                                                         strlen(topic_name));
+
+          streams_topic_count++;
+        }
+    } else {
+        kafka_topic_count++;
+    }
+
+    if ((regex_topic_count!=0 && streams_topic_count!=0)||
+        (streams_topic_count!=0 && kafka_topic_count!=0)) {
+      //Both streams and kafka topic names provided
+      *regex_count    = regex_topic_count;
+      *streams_count  = streams_topic_count;
+      return -1;
+    }
+  }
+  *streams_topics = temp_topics;
+  *regex_topics = temp_reg_topics;
+  *regex_count    = regex_topic_count;
+  *streams_count  = streams_topic_count;
+  if (regex_topic_count > 0 || streams_topic_count > 0  ) {
+    return 0;
+  } else if(kafka_topic_count > 0 ) {
+    return 1;
+  } else {
+    return -1;
+  }
+}
+
 void streams_topic_partition_free (streams_topic_partition_t *tps,
 				   int num_topics) {
 	int i;
@@ -1031,7 +1097,7 @@ int streams_get_topic_commit_info (rd_kafka_t *rk,
 
 	for (i=0; i < topics->cnt; i++) {
 		const char *topic_name = (topics->elems[i]).topic;
-		if (streams_is_valid_topic_name(topic_name)) {
+    if (streams_is_valid_topic_name(topic_name, NULL)) {
 			streams_topic_partition_create (topic_name,
 				(topics->elems[i]).partition,
 				 &tp[streams_topic_count]);
@@ -1091,18 +1157,17 @@ int streams_check_topic_name_is_valid (const char *topicName, uint32_t topicSz,
       ((topicSz == 2) && (topicName[0] == '.') && (topicName[1] == '.'))) {
     return -1;
   }
+  if (isRegex && topicName[0] == '^') {
+        *isRegex = true;
+        return 0;
+  }
   uint32_t i ;
   for (i = 0; i < topicSz; i++){
     if (isalnum(topicName[i]) || topicName[i] == '.' ||
         topicName[i] == '_' || topicName[i] == '-' ) {
       continue;
     } else {
-      if (isRegex) {
-        *isRegex = true;
-        return 0;
-      } else {
-        return -1;
-      }
+      return -1;
     }
   }
 
@@ -1115,7 +1180,20 @@ int streams_check_full_path_is_valid(const char *fullPath,
   if (isRegex) *isRegex = false;
   if (pathSize < 1 || fullPath[0] != '/')
       return -1;
+  char *topicName;
+  if (streams_get_name_from_full_path( fullPath, pathSize, NULL, &topicName) == -1)
+    return -1;
+  int err = streams_check_topic_name_is_valid(topicName, strlen(topicName), isRegex);
+  if (err)
+    return err;
 
+  return 0;
+}
+/*
+* Utility function to get stream and topic name 
+*/
+int streams_get_name_from_full_path (const char*fullPath, uint32_t pathSize,
+                                     char** stream, char **topic){
   uint32_t slashIdx = 0;
   uint32_t colonIdx = 0;
   // Look for the last '/' and first ':' after the last '/'l
@@ -1133,13 +1211,21 @@ int streams_check_full_path_is_valid(const char *fullPath,
   if (colonIdx == 0 || colonIdx - slashIdx <= 1)
     return -1;
 
-  uint32_t topicLen = pathSize - colonIdx - 1;
-  char topicName[topicLen + 1];
-  memcpy( topicName, &fullPath[colonIdx +1], topicLen );
-  topicName[topicLen +1] = '\0';
-  int err = streams_check_topic_name_is_valid(topicName, topicLen, isRegex);
-  if (err)
-    return err;
-
+  if(stream) {
+    uint32_t streamLen = colonIdx;
+    char *streamName;
+    streamName = (char *) malloc(sizeof (char) * (streamLen));
+    memcpy( streamName, &fullPath[0], streamLen );
+    streamName[streamLen] = '\0';
+    *stream = streamName;
+  }
+  if(topic) {
+    uint32_t topicLen = pathSize - colonIdx - 1;
+    char *topicName;
+    topicName = (char *) malloc(sizeof (char) * (topicLen + 1));
+    memcpy( topicName, &fullPath[colonIdx +1], topicLen );
+    topicName[topicLen] = '\0';
+    *topic = topicName;
+  }
   return 0;
 }

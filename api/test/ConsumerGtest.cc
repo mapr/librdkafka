@@ -45,11 +45,30 @@ protected:
   char *strName ;
   virtual void SetUp() {
     strName = "/gtest-ConsumerTest";
-    stream_create(strName, 1/*Num of Streams*/, 1/*Default Partitions*/);
+    stream_create(strName, 2/*Num of Streams*/, 4/*Default Partitions*/);
     sleep (1);
   }
   virtual void TearDown() {
     stream_delete(strName, 1);
+  }
+};
+
+class RegexTest: public testing::Test {
+
+protected:
+  char *strName1 ;
+  char *strName2 ;
+  virtual void SetUp() {
+    strName1 = "/gtest-ConsumerRegexTest1";
+    strName2 = "/gtest-ConsumerRegexTest2";
+    stream_create(strName1, 1/*Num of Streams*/, 1/*Default Partitions*/);
+    sleep (1);
+    stream_create(strName2, 1/*Num of Streams*/, 1/*Default Partitions*/);
+    sleep (1);
+  }
+  virtual void TearDown() {
+    stream_delete(strName1, 1);
+    stream_delete(strName2, 1);
   }
 };
 
@@ -87,7 +106,25 @@ void consumer_offset_commit_test_case (char *strName, const char *groupid,
   ASSERT_EQ(0, stream_delete(strName, 1));
 }
 
+void regex_test (char *str1, char *str2, int type, bool isBlackList) {
+  rd_kafka_resp_err_t err_expected = RD_KAFKA_RESP_ERR_NO_ERROR;
+  rd_kafka_resp_err_t err = ConsumerTest::runRegexTest (str1, str2, type, isBlackList);
+  switch (type) {
+    case 0: break;
 
+    case 1: err_expected =  RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+            break;
+
+    case 2: err_expected =  RD_KAFKA_RESP_ERR__INVALID_ARG;
+            break;
+
+    case 3: break;
+
+    default:
+            break;
+  }
+  EXPECT_EQ (err, err_expected);
+}
 /*-----------------------------------------------*/
 /*Consumer Create Tests*/
 /*-----------------------------------------------*/
@@ -340,6 +377,25 @@ TEST (ConsumerTest, seekPositionTest) {
   ASSERT_EQ (0, stream_create(STREAM_COMBINATION, 1, 1));
   ConsumerTest::runConsumerSeekPositionTest(STREAM_COMBINATION, "seekPositionGr",
                                             false);
+}
+
+/*-----------------------------------------------*/
+/*Consumer regex subscription test*/
+/*-----------------------------------------------*/
+TEST_F(RegexTest, consumerRegexOnlySubscribeWithoutBlacklistTest) {
+  regex_test (strName1, strName2, 0, false);
+}
+TEST_F(RegexTest, consumerRegexOnlySubscribeWithBlacklistTest) {
+  regex_test (strName1, strName2, 0, true);
+}
+TEST_F(RegexTest, consumerSubscribeRegexSameStreamSubscribeTest) {
+  regex_test (strName1, strName2, 1, false);
+}
+TEST_F(RegexTest, consumerRegexDiffStreamSubscribeTest) {
+  regex_test (strName1, strName2, 2, false);
+}
+TEST_F(RegexTest, consumerStreamOnlySubscribeTest) {
+  regex_test (strName1, strName2, 3, true);
 }
 
 int main (int argc, char **argv) {

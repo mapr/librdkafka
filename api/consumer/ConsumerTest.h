@@ -28,6 +28,8 @@ class ConsumerTest {
     static int runConsumerBack2BackTest (char *strName);
     static void runConsumerSeekPositionTest (char *strName, char * groupid,
                                             bool print);
+    static rd_kafka_resp_err_t runRegexTest(char *str1, char *str2, int type,
+                                            bool isBlackList);
 };
 
 struct RebalanceCbCtx {
