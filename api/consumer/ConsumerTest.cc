@@ -514,7 +514,7 @@ int ConsumerTest::runCommitTest (char * strName, const char *groupid,
   if(topicInvalid)
     return commitResult;
   else if (offsetInvalid) // commit all
-    return produceMsg + 1;
+    return 13;
   else if (consumerInvalid)
     return commitResult;
   else
@@ -586,16 +586,33 @@ int ConsumerTest::runConsumerBack2BackTest (char *strName) {
   s =  pthread_timedjoin_np (threadArgs.thread, NULL, &ts);
   return s;
 }
-void print_topic_partition_list (char *str,
-                                rd_kafka_topic_partition_list_t *list) {
-  cout << "\n" <<str;
+bool verify_topic_partition_list (char *str,
+                                rd_kafka_topic_partition_list_t *list,
+                                int64_t expectedVal,
+                                bool verify,
+                                bool print) {
+  if (print) cout << "\n" <<str;
+  bool match = false;
   for (int i =0; i< list->cnt; i++) {
-    cout << "\n Topic:" << list->elems[i].topic;
-    cout << "\t Partition:" << list->elems[i].partition;
-    cout << "\t Offset:" << list->elems[i].offset;
+    if(print) {
+      cout << "\n Topic:" << list->elems[i].topic;
+      cout << "\t Partition:" << list->elems[i].partition;
+      cout << "\t Offset:" << list->elems[i].offset;
+    }
+    if(expectedVal && verify) {
+      if(expectedVal == list->elems[i].offset )
+        match = true;
+      else {
+        match = false;
+        cerr << "\nERROR:" << str << " Offset expected: "<< expectedVal;
+        cerr << " , returned:" << list->elems[i].offset << " partition " << i;
+      }
+    }
   }
+  return match;
 }
-void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid) {
+void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid,
+                                                bool print) {
   Producer p;
   uint64_t cb = 0;
   int produceMsg = 1000;
@@ -630,14 +647,13 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid) {
   int msgCount = 0;
   int numMsgs = 100;
   int offset = -1;
-  rd_kafka_topic_t *rkt;
+  rd_kafka_topic_t *rkt = NULL;
   //consume 100 messages and commit the offset
   while (msgCount < numMsgs) {
     rd_kafka_message_t *rkmessage;
     rkmessage = rd_kafka_consumer_poll (consumer, 100);
     if (rkmessage) {
       msgCount ++;
-      cout << "\n" << (char *) rkmessage->payload;
       if (msgCount == numMsgs){
         offset = rkmessage->offset;
         rkt = rkmessage->rkt;
@@ -648,18 +664,21 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid) {
   //commit the offset
   rd_kafka_topic_partition_t *rktpar =
     rd_kafka_topic_partition_list_add (commit_list, currentName, 0);
- // rd_kafka_topic_partition_list_set_offset (tp_list, currentName, 0, offset+1);
   rktpar->offset = offset + 1;
   rd_kafka_commit (consumer, commit_list, 0);
   sleep (3);
   rd_kafka_committed (consumer, out_list, 1000);
-  print_topic_partition_list("Committed after 100 consumed messaged.",  out_list);
+  bool verify = true;
+  verify_topic_partition_list("Committed after 100 consumed messages.", out_list,
+                              numMsgs+1, verify, print);
   rd_kafka_position (consumer, out_list);
-  print_topic_partition_list("Position:" ,  out_list);
+  verify_topic_partition_list("Position after 100 consumed messages:" , out_list,
+                              numMsgs+1, verify, print);
   // seek to offset 500
   rd_kafka_seek (rkt, 0, 500, 2000 );
   rd_kafka_position (consumer, out_list);
-  print_topic_partition_list("Position after seek to 500:" ,  out_list);
+  verify_topic_partition_list("Position after seek to 500:" , out_list,
+                                500, verify, print);
   msgCount = 0;
   // consume 30 messages.
   while (msgCount < 30) {
@@ -667,7 +686,6 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid) {
     rkmessage = rd_kafka_consumer_poll (consumer, 100);
     if (rkmessage) {
       msgCount ++;
-      cout << "\n" << (char *) rkmessage->payload;
       if (msgCount == numMsgs){
         offset = rkmessage->offset;
         rkt = rkmessage->rkt;
@@ -675,26 +693,28 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid) {
       rd_kafka_message_destroy (rkmessage);
     }
   }
-  // commit the offset
-  // rd_kafka_topic_partition_list_set_offset (tp_list, currentName, 0, offset)
   rktpar->offset = offset +1;
   rd_kafka_commit (consumer, commit_list, 0);
   sleep (3);
   rd_kafka_committed (consumer, out_list, 1000);
-  print_topic_partition_list("Committed after 30 consumed messaged.",  out_list);
+  verify_topic_partition_list("Committed after 30 consumed messages.",  out_list,
+                              101, verify, print);
+
   rd_kafka_position (consumer, out_list);
-  print_topic_partition_list("Position:" ,  out_list);
-  // seek to offset 500
-  rd_kafka_seek (rkt, 0, 5, 2000 );
+  verify_topic_partition_list("Position after 30 consumed messages:" ,  out_list,
+                              530, verify, print);
+  // seek to offset 200
+  rd_kafka_seek (rkt, 0, 200, 2000 );
   rd_kafka_position (consumer, out_list);
-  print_topic_partition_list("Position after seek:" ,  out_list);
+  verify_topic_partition_list("Position after seek to 200:" , out_list,
+                              200, verify, print);
+
   msgCount = 0;
   while (msgCount < 200) {
     rd_kafka_message_t *rkmessage;
     rkmessage = rd_kafka_consumer_poll (consumer, 100);
     if (rkmessage) {
       msgCount ++;
-      cout << "\n" <<  (char *)rkmessage->payload;
       if (msgCount == 200){
         offset = rkmessage->offset;
         rkt = rkmessage->rkt;

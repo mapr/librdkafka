@@ -19,12 +19,17 @@ class ProducerTest {
                                               bool roundRb, int slowtopics,
                                               bool print, uint64_t timeout,
                                               uint64_t *numCallbacks);
-    static int runProducerMixedTopicTest(char * strName, int type);
+    static int runProducerMixedTopicTest(char * strName, int type, int flag);
     static int runProducerErrorTest(char * strName, int numMsgs,
                                     bool streamDelete);
     static int runProducerBatchTest (const char *strName, char *topicName,
                                      int startPartId, int numPart, int msgFlags,
                                      int totalMsgs);
+    static int runProduceOutqLenTest (const char *stream, int numStreams,
+                                             int numTopics, int numParts,
+                                             int numMsgsPerPartition, bool poll,
+                                             bool isCbConfigured, uint64_t timeout);
+
 };
 #endif
 

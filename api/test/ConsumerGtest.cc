@@ -200,7 +200,7 @@ TEST_F(SubscribeTest, kafkaConsumerInvalidGroupAssignTest) {
                                       0, 1, NULL, true));
 }
 TEST_F(SubscribeTest, maprConsumerMaprTopicAssignTest) {
-  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
                                                      1, 0, "ConsumerTest", true));
 }
 TEST_F(SubscribeTest, DISABLED_maprConsumerKafkaTopicAssignTest) {
@@ -267,7 +267,7 @@ TEST(ConsumerTest, consumerSubscribeCommitTest) {
 }
 TEST(ConsumerTest, consumerAssignCommitTest) {
   consumer_poll_test_case (STREAM_POLL,1, 4, 2, 10, 200,
-                           RD_KAFKA_MSG_F_COPY, true, 0, true, 30,
+                           RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
                            "consumerAssignGr", false, false, true );
 }
 
@@ -336,9 +336,10 @@ TEST (ConsumerTest, backToBackTest) {
 /*-----------------------------------------------*/
 /*Consumer seek-position combination test*/
 /*-----------------------------------------------*/
-TEST (ConsumerTest, DISABLED_seekPositionTest) {
+TEST (ConsumerTest, seekPositionTest) {
   ASSERT_EQ (0, stream_create(STREAM_COMBINATION, 1, 1));
-  ConsumerTest::runConsumerSeekPositionTest(STREAM_COMBINATION, "seekPositionGr");
+  ConsumerTest::runConsumerSeekPositionTest(STREAM_COMBINATION, "seekPositionGr",
+                                            false);
 }
 
 int main (int argc, char **argv) {

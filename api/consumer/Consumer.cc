@@ -202,11 +202,6 @@ uint64_t Consumer::run() {
     if(verifyKeys)
       rd_kafka_assignment (consumer, &outList);
   }
-  for (int i=0; i < outList->cnt; i++) {
-    cout << "\n topic: " << outList->elems[i].topic;
-    cout << "\t partition: " << outList->elems[i].partition;
-    cout << "\t offset: " << outList->elems[i].offset;
-  }
 
   int prevMsgId[nTotalTp];
   std::fill_n(prevMsgId, nTotalTp, -1);

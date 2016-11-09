@@ -1376,7 +1376,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		if(itopic->rkt_rk->kafka_producer)
 			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
-		if (!is_streams_producer(itopic->rkt_rk))
+    if (!is_streams_producer(itopic->rkt_rk))
       streams_producer_create_wrapper(itopic->rkt_rk);
      /*
 		 * TODO: Support partitioner callback.
@@ -1397,7 +1397,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		if (is_streams_producer(itopic->rkt_rk))
 			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 		//producing to kafka
-		itopic->rkt_rk->kafka_producer = true;
+    itopic->rkt_rk->kafka_producer = true;
 		return rd_kafka_msg_new(itopic,
 					partition,
 					msgflags,
@@ -2667,8 +2667,13 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
-	return rd_atomic32_get(&rk->rk_producer.msg_cnt) +
-                rd_kafka_q_len(&rk->rk_rep);
+  int count = 0;
+  if (is_streams_producer (rk))
+    streams_producer_send_buffer_get_size( (const) rk->streams_producer, &count);
+  else
+    count = rd_atomic32_get(&rk->rk_producer.msg_cnt);
+
+  return count + rd_kafka_q_len(&rk->rk_rep);
 }
 
 

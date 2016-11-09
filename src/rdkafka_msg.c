@@ -335,8 +335,8 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         }
 
 	rd_kafka_topic_rdunlock(rkt);
-    }
-    return good;
+  }
+        return good;
 }
 
 /**

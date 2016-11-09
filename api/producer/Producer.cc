@@ -127,8 +127,8 @@ int Producer::run(uint64_t *numCb) {
 	pollArgs.timeout = pollWaitTimeOutMS;
   pthread_create(&pollArgs.thread, NULL /*attr*/, ProducerPoll, &pollArgs);
 	int err = SUCCESS;
-  char **sendkeyArr;
-  char **sendvalueArr;
+  char **sendkeyArr = NULL;
+  char **sendvalueArr = NULL;
 
   if (sendflag & RD_KAFKA_MSG_F_FREE) {
       sendkeyArr = (char **) malloc (totalNumMsgs * sizeof(char *));

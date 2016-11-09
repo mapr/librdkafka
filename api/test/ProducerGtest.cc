@@ -99,6 +99,39 @@ void produce_batch_test (char* strName, char *topicName, int startPartId,
     EXPECT_EQ (totalMsgs, stream_count_check(strName, 1));
     EXPECT_EQ (SUCCESS, stream_delete(strName, 1));
 }
+
+void produce_mix_topic_test (char*strName, int type, int flag) {
+
+    ASSERT_EQ(0, stream_create (strName, 1/*stream index*/,
+                                 1/*Default Partitions*/));
+    EXPECT_EQ (RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
+        ProducerTest::runProducerMixedTopicTest(strName, type, flag));
+    EXPECT_EQ(0, stream_delete (strName, 1/*stream index*/));
+}
+
+void producer_outq_len_test (char*strName, int numStreams, int numTopics,
+                             int numParts, int numMsgsPerParts,
+                             bool isCbConfigured, bool poll, uint64_t timeout) {
+
+    ASSERT_EQ(0, stream_create (strName, numStreams/*stream index*/,
+                                 numParts/*Default Partitions*/));
+    int output = ProducerTest::runProduceOutqLenTest (strName,
+                                                      numStreams/*# of streams*/,
+                                                      numTopics/*# of topics*/,
+                                                      numParts/*# of partitions*/,
+                                                      numMsgsPerParts/*msgs/partn*/,
+                                                      isCbConfigured/*configure cb*/,
+                                                      poll/*Poll*/,
+                                                      timeout/*Timeout*/);
+    if (!poll && isCbConfigured)
+      EXPECT_EQ (TEST_TIMED_OUT, output);
+    else
+      EXPECT_EQ (SUCCESS, output);
+
+    int totalMsgs = numStreams * numTopics * numParts * numMsgsPerParts;
+    EXPECT_EQ (totalMsgs, stream_count_check(strName, numStreams));
+    EXPECT_EQ(0, stream_delete (strName, numStreams/*stream index*/));
+}
 /*-----------------------------------------------*/
 /*Producer Create Tests*/
 /*-----------------------------------------------*/
@@ -162,15 +195,16 @@ TEST(ProducerTest, msgProduceOutOfBoundPartitionTest) {
 /*Producer mixed topic tests*/
 /*-----------------------------------------------*/
 TEST(ProducerTest, msgProducerMaprProducerKafkaTopicTest) {
-    ASSERT_EQ(0, stream_create (STREAM, 1/*stream index*/,
-                                 1/*Default Partitions*/));
-    EXPECT_EQ (RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
-        ProducerTest::runProducerMixedTopicTest(STREAM, 0));
-    EXPECT_EQ(0, stream_delete (STREAM, 1/*stream index*/));
+  produce_mix_topic_test (STREAM, 0, RD_KAFKA_MSG_F_COPY);
 }
 TEST(ProducerTest, msgProducerKafkaProducerMaprTopicTest) {
-    EXPECT_EQ (RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
-        ProducerTest::runProducerMixedTopicTest(STREAM, 1));
+  produce_mix_topic_test (STREAM, 1, RD_KAFKA_MSG_F_COPY);
+}
+TEST(ProducerTest, msgProducerMaprProducerKafkaTopicMsgFreeTest) {
+  produce_mix_topic_test (STREAM, 0, RD_KAFKA_MSG_F_FREE);
+}
+TEST(ProducerTest, msgProducerKafkaProducerMaprTopicMsgFreeTest) {
+  produce_mix_topic_test (STREAM, 1, RD_KAFKA_MSG_F_FREE);
 }
 
 /*-----------------------------------------------*/
@@ -339,6 +373,33 @@ TEST (ProducerTest, produceBatchUnknownPartitionMsgCopyTest) {
 TEST (ProducerTest, produceBatchUnknownPartitionMsgFreeTest) {
   produce_batch_test (STREAM_BATCH, "topic"/*topic name*/, -1/*start partition id*/,
    4/* num of partitions*/, RD_KAFKA_MSG_F_FREE/*flag*/, 10000/*# of total msgs*/);
+}
+
+/*----------------------------------------------*/
+/* Producer outq len test*/
+/*-----------------------------------------------*/
+TEST(ProducerTest, outqLenDefaultTest) {
+  producer_outq_len_test(STREAM, 1/*# os streams*/, 2/*# of topics*/,
+                         4/*# of partitions*/, 100000/*msgs/partn*/,
+                         true/*cb configured*/, true/*poll*/, 30*1000/*Timeout*/);
+}
+
+TEST(ProducerTest, outqLenCbConfigureNoPollTest) {
+  producer_outq_len_test(STREAM, 1/*# os streams*/, 2/*# of topics*/,
+                         4/*# of partitions*/, 10000/*msgs/partn*/,
+                         true/*cb configured*/, false/*Poll*/, 30*1000/*Timeout*/);
+}
+
+TEST(ProducerTest, outqLenNoCbConfigurePollTest) {
+  producer_outq_len_test(STREAM, 1/*# os streams*/, 2/*# of topics*/,
+                         4/*# of partitions*/, 10000/*msgs/partn*/,
+                         false/*cb configured*/, true/*Poll*/, 30*1000/*Timeout*/);
+}
+
+TEST(ProducerTest, utqLenNoCbConfigureNoPollTest) {
+  producer_outq_len_test(STREAM, 1/*# os streams*/, 2/*# of topics*/,
+                         4/*# of partitions*/, 10000/*msgs/partn*/,
+                         false/*cb configured*/, false/*Poll*/, 30*1000/*Timeout*/);
 }
 
 int main (int argc, char **argv) {

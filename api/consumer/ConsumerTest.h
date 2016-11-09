@@ -26,7 +26,8 @@ class ConsumerTest {
     static int runConsumerCloseTest (char *strName, char * groupid,
                                             bool consumerInvalid);
     static int runConsumerBack2BackTest (char *strName);
-    static void runConsumerSeekPositionTest (char *strName, char * groupid);
+    static void runConsumerSeekPositionTest (char *strName, char * groupid,
+                                            bool print);
 };
 
 struct RebalanceCbCtx {

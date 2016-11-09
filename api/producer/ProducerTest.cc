@@ -187,25 +187,11 @@ int ProducerTest::runProducerErrorTest(char * strName, int numMsgs,
   }
 }
 
-void msg_delivered_cb (rd_kafka_t *rk,
-                              const rd_kafka_message_t *rkmessage,
-                              void *opaque) {
-  Producer::CallbackCtx *myCtx = (Producer::CallbackCtx *) rkmessage->_private;
-  uint64_t now = 0;
-  if (myCtx->start)
-    now = CurrentTimeMillis();
-
-  myCtx->stats->report(now - myCtx->start, myCtx->bytes);
-  delete myCtx;
-
-};
-
-int ProducerTest::runProducerMixedTopicTest(char * strName, int type){
+int ProducerTest::runProducerMixedTopicTest(char * strName, int type, int flag){
   rd_kafka_t *producer;
   int err = SUCCESS;
   char errstr[512];
   rd_kafka_conf_t *conf = rd_kafka_conf_new();
-  rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered_cb);
   //Create Producer
   if (!(producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
                                 errstr, sizeof(errstr)))){
@@ -228,9 +214,9 @@ int ProducerTest::runProducerMixedTopicTest(char * strName, int type){
   char *value;
   switch (type) {
   case 0: //mapr producer
-          key = "maprProduceMaprTopicKey";
-          value = "maprProducerMaprTopicValue";
-          err = rd_kafka_produce(maprTopicObj, 0, 0, value,
+          key = strdup("maprProduceMaprTopicKey");
+          value = strdup("maprProducerMaprTopicValue");
+          err = rd_kafka_produce(maprTopicObj, 0, flag, value,
                                 strlen(value), key, strlen(key), NULL);
           if(err) {
             rd_kafka_topic_destroy(maprTopicObj);
@@ -238,15 +224,15 @@ int ProducerTest::runProducerMixedTopicTest(char * strName, int type){
             rd_kafka_destroy(producer);
             return PRODUCER_SEND_FAILED;
           }
-          key = "maprProducerKafkaTopicKey";
-          value = "maprProducerKafkaTopicValue";
-          err= rd_kafka_produce(kafkaTopicObj, 0, 0, value,
+          key = strdup("maprProducerKafkaTopicKey");
+          value = strdup("maprProducerKafkaTopicValue");
+          err= rd_kafka_produce(kafkaTopicObj, 0, flag, value,
                                 strlen(value), key, strlen(key), NULL);
           break;
   case 1://kafka producer
-          key = "kafkaProduceKafkaTopicKey";
-          value = "kafkaProducerKafkaTopicValue";
-          err = rd_kafka_produce(kafkaTopicObj, 0, 0, value,
+          key = strdup("kafkaProduceKafkaTopicKey");
+          value = strdup("kafkaProducerKafkaTopicValue");
+          err = rd_kafka_produce(kafkaTopicObj, 0, flag, value,
                                 strlen(value), key, strlen(key), NULL);
           if(err) {
             rd_kafka_topic_destroy(maprTopicObj);
@@ -254,9 +240,9 @@ int ProducerTest::runProducerMixedTopicTest(char * strName, int type){
             rd_kafka_destroy(producer);
             return PRODUCER_SEND_FAILED;
           }
-          key = "kafkaProducerMaprTopicKey";
-          value = "kafkaProducerMaprTopicValue";
-          err = rd_kafka_produce(maprTopicObj, 0, 0, value,
+          key = strdup("kafkaProducerMaprTopicKey");
+          value = strdup("kafkaProducerMaprTopicValue");
+          err = rd_kafka_produce(maprTopicObj, 0, flag, value,
                                 strlen(value), key, strlen(key), NULL);
           break;
   default:
@@ -338,4 +324,88 @@ int ProducerTest::runProducerBatchTest (const char *strName,
   rd_kafka_topic_destroy(rkt);
   rd_kafka_destroy(rk);
   return retCount ;
+}
+void msg_delivered_cb_stub (rd_kafka_t *rk,
+                       const rd_kafka_message_t *rkmessage,
+                       void *opaque) {
+  //Callback stub with empty body.
+};
+
+int ProducerTest::runProduceOutqLenTest (const char *stream, int numStreams,
+                                         int numTopics, int numParts,
+                                         int numMsgsPerPartition, bool isCbConfigured,
+                                         bool poll, uint64_t timeout){
+  rd_kafka_t *producer;
+  rd_kafka_conf_t *conf;
+  conf = rd_kafka_conf_new();
+  char errstr[512];
+  if (isCbConfigured)
+    rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered_cb_stub);
+
+  producer = rd_kafka_new (RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+
+  if (!producer) {
+      cerr << "\nrunProduceOutqLenTest: Failed to create new producer\n" <<  errstr;
+      return PRODUCER_CREATE_FAILED;
+  }
+
+  rd_kafka_topic_t **topicArr = (rd_kafka_topic_t **) malloc (numStreams *
+                                  numTopics* sizeof(rd_kafka_topic_t *));
+  rd_kafka_topic_conf_t *topicConf = rd_kafka_topic_conf_new();
+  for (int s = 0; s <  numStreams; ++s) {
+     for (int i = 0; i <  numTopics; ++i) {
+      char currentName[100];
+      int tempIndex = s * numTopics +i;
+      sprintf(currentName, "%s%d:topic%d",  stream, s, i);
+      topicArr[tempIndex] = rd_kafka_topic_new( producer, currentName,
+                                        rd_kafka_topic_conf_dup(topicConf));
+      }
+  }
+
+  for (int sIdx = 0; sIdx <  numStreams; sIdx++) {
+    for (int tIdx = 0; tIdx < numTopics; tIdx++) {
+      rd_kafka_topic_t *topicObj = topicArr[sIdx * numTopics + tIdx];
+      for (int pIdx = 0; pIdx <  numParts; pIdx++) {
+        for (int mIdx = 0; mIdx <  numMsgsPerPartition; mIdx++) {
+            char sendkey[200];
+            char sendvalue[200];
+
+            memset (sendkey, '\0', 200);
+            sprintf(sendkey, "Key:%s%d:topic%d:%d:%d:%d:%d",stream,
+                                            sIdx, tIdx,sIdx, tIdx, pIdx, mIdx);
+            size_t keySize = (size_t)strlen(sendkey);
+            memset(sendvalue, 'a' , 200);
+            sprintf(sendvalue, "Value:%s%d:%d:%d:%d",stream,
+                                            sIdx, tIdx, pIdx, mIdx);
+            size_t valSize = 200;
+
+            rd_kafka_produce(topicObj, pIdx, RD_KAFKA_MSG_F_COPY, sendvalue,
+                                      valSize, sendkey, keySize, NULL);
+
+        }
+      }
+    }
+  }
+
+  uint64_t startTime = CurrentTimeMillis();
+  uint64_t currentTime = startTime;
+  bool testTO = false;
+  while (rd_kafka_outq_len(producer) > 0) {
+    if(poll)
+      rd_kafka_poll(producer, 1);
+
+    currentTime = CurrentTimeMillis();
+    if (currentTime - startTime > timeout) {
+      testTO = true;
+      break;
+    }
+  }
+  for (int s = 0; s <  numStreams * numTopics; ++s)
+   rd_kafka_topic_destroy(topicArr[s]);
+
+  rd_kafka_destroy(producer);
+
+  if (testTO)
+    return TEST_TIMED_OUT;
+  return 0;
 }
