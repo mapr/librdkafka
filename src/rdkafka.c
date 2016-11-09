@@ -1235,20 +1235,20 @@ static void streams_producer_wrapper_cb (int32_t err,
 	rd_kafka_t *rk = wrapper_cb_ctx->rk;
 
 	//check for configured callback for message produced.
-	if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
-			(!rk->rk_conf.dr_err_only || err)) {
-		rd_kafka_msg_t *rkm;
-		const void *str_produced;
-		const void *key;
-		uint32_t msglen, keylen;
+	rd_kafka_msg_t *rkm;
+	const void *str_produced;
+	const void *key;
+	uint32_t msglen, keylen;
 
-		streams_producer_record_get_value (record,
+	streams_producer_record_get_value (record,
 						   &str_produced,
 						   &msglen);
-		streams_producer_record_get_key (record,
+	streams_producer_record_get_key (record,
 						 &key,
 						 &keylen);
 
+	if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
+			(!rk->rk_conf.dr_err_only || err)) {
 		if (wrapper_cb_ctx->topic != NULL) {
 			rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(wrapper_cb_ctx->topic);
 			streams_message_create (itopic,
@@ -1256,7 +1256,7 @@ static void streams_producer_wrapper_cb (int32_t err,
 						wrapper_cb_ctx->msgflags,
 						(char *)str_produced,
 						msglen,
-						key,
+						(const void *)key,
 						keylen,
 						wrapper_cb_ctx->msg_opaque,
 						(rd_kafka_resp_err_t) err,
@@ -1273,7 +1273,12 @@ static void streams_producer_wrapper_cb (int32_t err,
 		rd_kafka_msgq_init (&rko->rko_msgq);
 		rd_kafka_msgq_enq (&rko->rko_msgq, rkm);
 		rd_kafka_q_enq (&rk->rk_rep, rko);
-	}
+	} else {
+		if ( wrapper_cb_ctx->msgflags != 0) {
+		rd_free ((char *)str_produced);
+		if(key) rd_free ((char *)key);
+	  }
+  }
 	streams_producer_record_destroy(record);
 	rd_free(wrapper_cb_ctx);
 };
@@ -1317,19 +1322,16 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
     /* Copy payload to space following the ..msg_t */
     copyPayload =  malloc (sizeof (char) * len);
     memcpy(copyPayload, payload, len);
-    if(keylen != 0) {
-      copyKey =  malloc (sizeof (char) * keylen);
-      memcpy(copyKey, key, keylen);
-    }
   } else {
     /* Just point to the provided payload. */
     copyPayload = payload;
+  }
+  if (keylen!= 0) {
+    copyKey =  malloc (sizeof (char) * keylen);
+    memcpy(copyKey, key, keylen);
+  } else {
     copyKey = key;
   }
-  if (keylen!= 0)
-    copyKey =  rd_kafkap_bytes_new(key, (int32_t) keylen);
-  else
-    copyKey = key;
 	streams_producer_record_t record;
 	streams_producer_record_create(tp,
 				       (const char *)copyKey,
@@ -1356,6 +1358,37 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
   streams_topic_partition_destroy(tp);
 	return result;
 }
+
+/**
+* Run partitioner and return the partition id where msg should be produced
+*/
+int32_t
+streams_run_partitioner (rd_kafka_topic_t *rkt, const void *key,
+                         size_t keylen, void *msg_opaque) {
+  int32_t partition = INVALID_PARTITION_ID;
+  int num_partition = 0;
+  rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
+
+  if ((itopic->rkt_conf).user_defined_partitioner) {
+    if (streams_producer_get_num_partitions (itopic->rkt_rk->streams_producer,
+                                       itopic->rkt_topic->str,
+                                       &num_partition) != 0)
+      return partition; //let streams code handle the partitioner
+    /*
+    *  rd_kafka_topic_new is supposed to set default partitioner to
+    *  rd_kafka_msg_partitioner_consistent_random
+    */
+    partition = (itopic->rkt_conf).partitioner(rkt, key, keylen, num_partition,
+                                       itopic->rkt_conf.opaque, msg_opaque);
+  }
+  if ( partition == RD_KAFKA_PARTITION_UA) // kafka could not perform partitioner
+    partition = INVALID_PARTITION_ID;
+
+  //if user defined partitioner is not present, let streams take care of
+  //partitioning a msg
+  return partition;
+}
+
 /**
  * Produce a single message.
  * Locality: any application thread
@@ -1382,7 +1415,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		 * TODO: Support partitioner callback.
 		 */
 		if (partition == RD_KAFKA_PARTITION_UA)
-			partition = INVALID_PARTITION_ID;
+		    partition = streams_run_partitioner (rkt, key, keylen, msg_opaque);
 
 		//Producing to streams
 	  return streams_producer_send_wrapper(itopic,

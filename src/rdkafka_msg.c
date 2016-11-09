@@ -41,13 +41,19 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 	if (!is_streams_producer(rk)) {
 		rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
 		(void)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
-	}
-	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
-		rd_free(rkm->rkm_payload);
 
-	if (rkm->rkm_key)
-		rd_kafkap_bytes_destroy(rkm->rkm_key);
+	  if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
+		  rd_free(rkm->rkm_payload);
 
+	  if (rkm->rkm_key)
+		  rd_kafkap_bytes_destroy(rkm->rkm_key);
+  } else {
+	  if (rkm->rkm_payload)
+		  rd_free(rkm->rkm_payload);
+
+	  if (rkm->rkm_key)
+		  rd_free(rkm->rkm_key);
+  }
 	rd_free(rkm);
 }
 

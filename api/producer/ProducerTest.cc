@@ -328,7 +328,12 @@ int ProducerTest::runProducerBatchTest (const char *strName,
 void msg_delivered_cb_stub (rd_kafka_t *rk,
                        const rd_kafka_message_t *rkmessage,
                        void *opaque) {
-  //Callback stub with empty body.
+  bool *print = (bool *) opaque;
+  if(*print) {
+    cout << "\n Partition: "  << rkmessage->partition ;
+    cout << "\t Key: " << rkmessage->key;
+    cout << "\t Payload: "  << (char *) rkmessage->payload ;
+  }
 };
 
 int ProducerTest::runProduceOutqLenTest (const char *stream, int numStreams,
@@ -338,10 +343,11 @@ int ProducerTest::runProduceOutqLenTest (const char *stream, int numStreams,
   rd_kafka_t *producer;
   rd_kafka_conf_t *conf;
   conf = rd_kafka_conf_new();
+  bool print = false;
   char errstr[512];
   if (isCbConfigured)
     rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered_cb_stub);
-
+  rd_kafka_conf_set_opaque (conf, (void *) &print);
   producer = rd_kafka_new (RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
 
   if (!producer) {
@@ -408,4 +414,86 @@ int ProducerTest::runProduceOutqLenTest (const char *stream, int numStreams,
   if (testTO)
     return TEST_TIMED_OUT;
   return 0;
+}
+
+int ProducerTest::runPartitionerTest (const char *stream, int numParts,
+                                      bool userDefinedPartitioner, int pType,
+                                      int keyType) {
+  rd_kafka_t *producer;
+  rd_kafka_conf_t *conf;
+  conf = rd_kafka_conf_new();
+  bool print = false;
+  char errstr[512];
+  rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered_cb_stub);
+  rd_kafka_conf_set_opaque (conf, &print);
+  producer = rd_kafka_new (RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+
+  if (!producer) {
+      cerr << "\nrunPartitionerTest: Failed to create new producer\n" <<  errstr;
+      return PRODUCER_CREATE_FAILED;
+  }
+
+  rd_kafka_topic_conf_t *topicConf = rd_kafka_topic_conf_new();
+  if (userDefinedPartitioner) {
+    cout << "userDefinedPartitioner";
+    switch (pType) {
+      case 0://random partitioner
+            rd_kafka_topic_conf_set_partitioner_cb (topicConf,
+                                    rd_kafka_msg_partitioner_random);
+            break;
+      case 1://Consistent partitioner
+            rd_kafka_topic_conf_set_partitioner_cb (topicConf,
+                                    rd_kafka_msg_partitioner_consistent);
+            break;
+      case 2://Consistent random partitioner
+            rd_kafka_topic_conf_set_partitioner_cb (topicConf,
+                                    rd_kafka_msg_partitioner_consistent_random);
+            break;
+      default:
+            break;
+    }
+  }
+  char currentName[100];
+  sprintf(currentName, "%s0:topic",  stream);
+  rd_kafka_topic_t *topicObj = rd_kafka_topic_new( producer, currentName, topicConf);
+  bool nullKey = false;
+  int err = 0;
+  for (int mIdx = 0; mIdx < 100; mIdx++) {
+    char sendkey[200];
+    char sendvalue[200];
+    size_t keySize = 0;
+    switch (keyType) {
+        case 0: //Null Key
+                nullKey = true;
+                break;
+        case 1: //Same Key
+                memset (sendkey, 0 , 200);
+                sprintf(sendkey, "Key:%s0:topic", stream);
+                break;
+        case 2: //Diff Key
+                memset (sendkey, 0 , 200);
+                sprintf(sendkey, "Key:%s0:topic:%d", stream, mIdx);
+                break;
+        default:nullKey = true;
+                break;
+    }
+    if(!nullKey)
+      keySize = (size_t)strlen(sendkey);
+
+    memset(sendvalue, 0 , 200);
+    sprintf(sendvalue, "Value:%s0",stream);
+    size_t valSize = strlen (sendvalue);
+
+      if (!nullKey)
+        err += rd_kafka_produce(topicObj, -1, RD_KAFKA_MSG_F_COPY, sendvalue,
+                                      valSize, sendkey, keySize, NULL);
+      else
+        err += rd_kafka_produce(topicObj, -1, RD_KAFKA_MSG_F_COPY, sendvalue,
+                                      valSize, NULL, 0, NULL);
+  }
+
+  while (rd_kafka_outq_len(producer) > 0) {
+    rd_kafka_poll(producer, 1);
+  }
+ return err;
 }

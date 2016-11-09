@@ -648,6 +648,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(partitioner),
 	  "Partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
+	{ _RK_TOPIC|_RK_PRODUCER, "user_defined_partitioner", _RK_C_BOOL,
+	  _RKT(user_defined_partitioner),
+	  "User defined partitioner callback "
+	  "(set with rd_kafka_topic_conf_set_partitioner_cb())",
+	  .vdef = 0 },
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
@@ -1451,7 +1456,9 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 						int32_t partition_cnt,
 						void *rkt_opaque,
 						void *msg_opaque)) {
-	topic_conf->partitioner = partitioner;
+
+  topic_conf->user_defined_partitioner = true;
+  topic_conf->partitioner = partitioner;
 }
 
 void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,

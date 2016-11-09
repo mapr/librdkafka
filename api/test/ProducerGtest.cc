@@ -34,6 +34,8 @@
 
 char *STREAM ="/gtest-ProducerTest";
 char *STREAM_BATCH ="/gtest-BatchProduceTest";
+const char *STREAM_PARTITIONER = "/gtest-partitioner";
+
 uint64_t numCallbacks;
 uint64_t expectedCb;
 
@@ -132,6 +134,18 @@ void producer_outq_len_test (char*strName, int numStreams, int numTopics,
     EXPECT_EQ (totalMsgs, stream_count_check(strName, numStreams));
     EXPECT_EQ(0, stream_delete (strName, numStreams/*stream index*/));
 }
+
+void run_partitioner_test (const char *strName, int numPart,
+                           bool userDefinedPartitioner, int partitionerType,
+                           int keyType){
+  ASSERT_EQ(0, stream_create(strName, 1/*Num of Streams*/,
+                             numPart/*Default Partitions*/));
+  ProducerTest::runPartitionerTest (strName, numPart, userDefinedPartitioner,
+                                    partitionerType, keyType);
+  /*TODO: Add Verify step*/
+}
+
+
 /*-----------------------------------------------*/
 /*Producer Create Tests*/
 /*-----------------------------------------------*/
@@ -163,7 +177,9 @@ TEST(ProducerTest, msgProduceMsgFlagCopyTest) {
 }
 
 TEST(ProducerTest, msgProduceMsgFlagFreeTest) {
-    msg_produce_test_case (STREAM, 0, true, true, "key", "value",
+    char *value = (char *)malloc(6 * sizeof(char));
+    strcpy(value, "Value");
+    msg_produce_test_case (STREAM, 0, true, true, "Key", value,
                             RD_KAFKA_MSG_F_FREE,  1);
 }
 
@@ -400,6 +416,69 @@ TEST(ProducerTest, utqLenNoCbConfigureNoPollTest) {
   producer_outq_len_test(STREAM, 1/*# os streams*/, 2/*# of topics*/,
                          4/*# of partitions*/, 10000/*msgs/partn*/,
                          false/*cb configured*/, false/*Poll*/, 30*1000/*Timeout*/);
+}
+
+/*----------------------------------------------*/
+/* Producer partitioner test*/
+/*-----------------------------------------------*/
+
+TEST (ProducerTest, partitionerNullKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, false,
+                        -1/*partitioner not defined*/, 0/*Null key*/);
+}
+
+TEST (ProducerTest, partitionerSameKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, false,
+                        -1/*partitioner not defined*/, 1/*Same key*/);
+}
+
+TEST (ProducerTest, partitionerDiffKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, false,
+                        -1/*partitioner not defined*/, 2/*Diff key*/);
+}
+
+TEST (ProducerTest, userRandomPartitionerNullKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true, 0/*Random partitioner*/,
+                        0/*Null key*/);
+}
+
+TEST (ProducerTest, userRandomPartitionerSameKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true, 0/*Random partitioner*/,
+                        1/*Same key*/);
+}
+
+TEST (ProducerTest, userRandomPartitionerDiffKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true, 0/*Random partitioner*/,
+                        2/*Different key*/);
+}
+
+TEST (ProducerTest, userConsistentPartitionerNullKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true, 1/*Consistent partitioner*/,
+                        0/*Null key*/);
+}
+
+TEST (ProducerTest, userConsistentPartitionerSameKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true, 1/*Consistent partitioner*/,
+                        1/*Same key*/);
+}
+
+TEST (ProducerTest, userConsistentPartitionerDiffKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true, 1/*Consistent partitioner*/,
+                        2/*Different key*/);
+}
+TEST (ProducerTest, userConsistentRandomPartitionerNullKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true,
+                        2/*Consistent-Random partitioner*/, 0/*Null key*/);
+}
+
+TEST (ProducerTest, userConsistentRandomPartitionerSameKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true,
+                        2/*Consistent-Random partitioner*/, 1/*Same key*/);
+}
+
+TEST (ProducerTest, userConsistentRandomPartitionerDiffKeyTest) {
+  run_partitioner_test (STREAM_PARTITIONER, 4, true,
+                        2/*Consistent-Random partitioner*/, 2/* Diff key*/);
 }
 
 int main (int argc, char **argv) {

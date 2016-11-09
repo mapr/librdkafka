@@ -30,6 +30,9 @@ class ProducerTest {
                                              int numMsgsPerPartition, bool poll,
                                              bool isCbConfigured, uint64_t timeout);
 
+    static int runPartitionerTest (const char *stream, int numParts,
+                                      bool userDefinedPartitioner, int pType,
+                                      int keyType);
 };
 #endif
 
