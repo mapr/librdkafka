@@ -533,7 +533,6 @@ static void streams_offset_commit_wrapper_cb (int32_t err,
 						 (void *)rd_kafka_topic_partition_list_destroy);
 		rd_kafka_q_enq(&rk->rk_rep, rko);
 	}
-	rd_kafka_topic_partition_list_destroy(wrapper_cb_ctx->offsets);
 	rd_free (wrapper_cb_ctx);
 };
 
@@ -548,9 +547,8 @@ streams_commit_topics (rd_kafka_t *rk,
 	size_t ctxlen = sizeof(opaque_wrapper);
 	opaque_wrapper = rd_malloc(ctxlen);
 	opaque_wrapper->rk = rk;
-	opaque_wrapper->offsets = rd_kafka_topic_partition_list_copy (offsets);
 	rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
- 	if (async) {
+	if (async) {
 		streams_consumer_commit_async ((const streams_consumer_t) rk->streams_consumer,
 						(const streams_topic_partition_t*) streams_topics,
 						(const int64_t*) cursor,

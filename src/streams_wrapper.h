@@ -13,13 +13,11 @@ typedef struct {
 
 typedef struct {
 	rd_kafka_t *rk;
-	rd_kafka_topic_partition_list_t *partitions;
 } streams_consumer_callback_ctx;
 
 typedef struct {
 	rd_kafka_t *rk;
 	rd_kafka_resp_err_t err;
-	rd_kafka_topic_partition_list_t *offsets;
 	void *opaque;
 } streams_offset_commit_callback_ctx;
 

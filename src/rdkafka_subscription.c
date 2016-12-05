@@ -167,29 +167,149 @@ void streams_consumer_create_wrapper(rd_kafka_t *rk) {
 	rk->streams_consumer = consumer;
 }
 
+
+
+void streams_topic_regex_list_free (char **strTopics, int strCount,
+                                    char **regTopics, int regCount) {
+		streams_topic_free(strTopics, strCount);
+		streams_topic_free(regTopics, regCount);
+}
+
+bool streams_check_regex_for_same_stream_and_combine (char **regex_topics,
+                                                      int count,
+                                                      char **outRegex) {
+  bool match = false;
+  if(regex_topics){
+    int i, err = 0;
+    char *temp_reg_stream;
+    char **temp_reg_topic= (char **)malloc (count * sizeof (char*));
+    char *out;
+    int totalLen = 0;
+    for (i = 0; i < count; i++) {
+
+      char *temp_stream;
+      err = streams_get_name_from_full_path (regex_topics[i],
+                                              strlen(regex_topics[i]),
+                                              &temp_stream,
+                                              &temp_reg_topic[i] );
+      if(err) {
+        streams_topic_free(temp_reg_topic, count);
+        return false;
+      }
+      if(i == 0) {
+        temp_reg_stream = temp_stream;
+        totalLen += strlen(temp_reg_stream)+1; //+1 for ':' after stream name
+      }
+      if (strcmp (temp_reg_stream, temp_stream) == 0) {
+          match = true;
+          memmove(temp_reg_topic[i], temp_reg_topic[i]+1,  strlen(temp_reg_topic[i]));
+          if(i == count-1)
+            totalLen += strlen(temp_reg_topic[i]); // Last regex
+          else
+            totalLen += strlen(temp_reg_topic[i])+1; //+1 for '|'
+      } else {
+          match = false;
+          break;
+      }
+    }
+    if (match) {
+      out = malloc (totalLen * sizeof(char));
+      sprintf (out, "%s:", temp_reg_stream);
+      for (i = 0; i < count; i++) {
+          strcat(out, temp_reg_topic[i]);
+          if(i != count-1)
+            strcat(out, "|");
+      }
+    }
+    *outRegex = out;
+    streams_topic_free(temp_reg_topic, count);
+  }
+  return match;
+}
+
+void streams_get_topic_blacklist_for_stream (rd_kafka_pattern_list_t *blacklist,
+                                             char *compareStream, char **outStream) {
+    rd_kafka_pattern_t *rkpat;
+    char *stream;
+    char *topic;
+    char *combinedStream = malloc (0);
+    int count = 0;
+    bool isBlackList = false;
+    TAILQ_FOREACH(rkpat, &blacklist->rkpl_head, rkpat_link) {
+      isBlackList = true;
+      int err = 0;
+      err  = streams_get_name_from_full_path(rkpat->rkpat_orig,
+                                             strlen(rkpat->rkpat_orig),
+                                             &stream, &topic);
+      if (err || (strcmp (stream, compareStream) != 0))
+        continue;
+
+      if (count == 0) {
+        combinedStream = realloc (combinedStream, sizeof (char) *
+                                        (strlen(stream) + strlen (topic)+1));
+        sprintf (combinedStream, "%s:%s", stream, topic);
+      } else {
+        combinedStream = realloc (combinedStream, sizeof (char) *
+                                  (strlen(combinedStream) + strlen (topic)+1));
+        strcat(combinedStream, "|");
+        strcat(combinedStream, topic);
+      }
+      count ++;
+      if (!err) {
+        free (stream);
+        free (topic);
+      }
+    }
+    if(isBlackList) {
+      *outStream = combinedStream;
+    } else {
+      *outStream = NULL;
+      //free (combinedStream);
+    }
+}
+
 rd_kafka_resp_err_t
 streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 																		const rd_kafka_topic_partition_list_t *topics,
 																		bool *is_kafka_subscribe) {
 	*is_kafka_subscribe = false;
-	char **streams_topics = rd_malloc(topics->cnt * sizeof(char*));
-	int tcount = topics->cnt;
-	int topic_validity = streams_get_topic_names(topics,
-				streams_topics,
-				&tcount);  // TODO: Regex topics
+  char **streams_topics = rd_malloc(0);
+  char **regex_topics = rd_malloc(0);
+  char *regex = NULL;
+
+  int streams_topic_count = 0;
+  int regex_topic_count = 0;
+  int topic_validity = streams_get_regex_topic_names(rk, topics,
+        &streams_topics, &regex_topics,
+        &streams_topic_count,
+        &regex_topic_count);
 
 	switch (topic_validity) {
 
 	case -1:
-		streams_topic_free(streams_topics, tcount);
-		return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;	// TODO: return proper error code
+    streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                                  regex_topics, regex_topic_count);
+    return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;	// TODO: return proper error code
 
 	case 0:
-		if (rk->kafka_consumer) {
-			streams_topic_free(streams_topics, tcount);
+    if (rk->kafka_consumer) {
+      streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                                  regex_topics, regex_topic_count);
+
+      free(regex);
 			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		}
 		//all streams topics
+		if(regex_topic_count > 0) {
+      if(!streams_check_regex_for_same_stream_and_combine (regex_topics,
+                                                           regex_topic_count,
+                                                           &regex)){
+        streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                                             regex_topics, regex_topic_count);
+        return RD_KAFKA_RESP_ERR__INVALID_ARG; // return new error code -
+                                           // "not supported"
+      }
+    }
 		if(!is_streams_consumer(rk)) {
 			streams_consumer_create_wrapper (rk);
 		}
@@ -198,28 +318,48 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 		size_t ctxlen = sizeof(*opaque_wrapper);
 		opaque_wrapper = rd_malloc(ctxlen);
 		opaque_wrapper->rk = rk;
-		opaque_wrapper->partitions = rd_kafka_topic_partition_list_copy (topics);
+    if (streams_topic_count > 0) {
 
-		streams_consumer_subscribe_topics((const streams_consumer_t) rk->streams_consumer,
+		  streams_consumer_subscribe_topics((const streams_consumer_t) rk->streams_consumer,
               (const char**) streams_topics,
               topics->cnt,
               (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
               (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
               (void *)opaque_wrapper);
+    }
+    if (regex_topic_count > 0) {
+      if (regex) {
+        char *str;
+        char *blacklist;
+        streams_get_name_from_full_path(regex, strlen(regex), &str, NULL);
+        streams_get_topic_blacklist_for_stream (&rk->rk_conf.topic_blacklist,
+                                                str, &blacklist);
 
+        streams_consumer_subscribe_regex ((const streams_consumer_t) rk->streams_consumer,
+              (const char*) regex,
+              (const char*) blacklist,
+              (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
+              (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
+              (void *)opaque_wrapper);
+      }
+    }
 		break;
 
 	case 1:
 		//all kafka topics
-		if (is_streams_consumer(rk))
+		streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                                  regex_topics, regex_topic_count);
+    if (is_streams_consumer(rk))
 			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		else
 			*is_kafka_subscribe = true;
-		streams_topic_free(streams_topics, tcount);
-		break;
+		streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                                  regex_topics, regex_topic_count);
+    break;
 
 	default:
-		streams_topic_free(streams_topics, tcount);
+    streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                                  regex_topics, regex_topic_count);
 		rd_dassert (topic_validity >1 || topic_validity < -1);
 		break;
 	}
@@ -268,7 +408,7 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
   //streams_topic_partition_t streams_tps[topics->cnt];
   for (i=0; i < topics->cnt; i++) {
     const char *topic_name =  (topics->elems[i]).topic;
-    if (streams_is_valid_topic_name(topic_name)) {
+    if (streams_is_valid_topic_name(topic_name, NULL)) {
 
       streams_topic_partition_create(topic_name, (topics->elems[i]).partition,
                                                   &streams_tps[i]);
