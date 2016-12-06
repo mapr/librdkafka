@@ -969,8 +969,9 @@ bool streams_is_valid_topic_name (const char * topic_name, bool *isRegex) {
 void streams_topic_free (char **streams_topics,
 			 int num_topics) {
 	int i;
-	for(i=0; i< num_topics; i++)
-		rd_free((void *)streams_topics[i]);
+	for(i=0; i< num_topics; i++) {
+    rd_free((void *)streams_topics[i]);
+  }
 
 	rd_free(streams_topics);
 }

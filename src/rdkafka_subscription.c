@@ -171,7 +171,8 @@ void streams_consumer_create_wrapper(rd_kafka_t *rk) {
 
 void streams_topic_regex_list_free (char **strTopics, int strCount,
                                     char **regTopics, int regCount) {
-		streams_topic_free(strTopics, strCount);
+		printf ("\nstreams_topic_regex_list_free: strCount %d regCount %d ", strCount, regCount);
+    streams_topic_free(strTopics, strCount);
 		streams_topic_free(regTopics, regCount);
 }
 
@@ -185,7 +186,9 @@ bool streams_check_regex_for_same_stream_and_combine (char **regex_topics,
     char **temp_reg_topic= (char **)malloc (count * sizeof (char*));
     char *out;
     int totalLen = 0;
+
     for (i = 0; i < count; i++) {
+      printf("\ni: %d", i);
 
       char *temp_stream;
       err = streams_get_name_from_full_path (regex_topics[i],
@@ -202,6 +205,7 @@ bool streams_check_regex_for_same_stream_and_combine (char **regex_topics,
       }
       if (strcmp (temp_reg_stream, temp_stream) == 0) {
           match = true;
+          printf ("\n match true");
           memmove(temp_reg_topic[i], temp_reg_topic[i]+1,  strlen(temp_reg_topic[i]));
           if(i == count-1)
             totalLen += strlen(temp_reg_topic[i]); // Last regex
@@ -209,9 +213,11 @@ bool streams_check_regex_for_same_stream_and_combine (char **regex_topics,
             totalLen += strlen(temp_reg_topic[i])+1; //+1 for '|'
       } else {
           match = false;
+          printf ("\n match false");
           break;
       }
     }
+    printf ("\n => i: %d", i);
     if (match) {
       out = malloc (totalLen * sizeof(char));
       sprintf (out, "%s:", temp_reg_stream);
@@ -220,8 +226,12 @@ bool streams_check_regex_for_same_stream_and_combine (char **regex_topics,
           if(i != count-1)
             strcat(out, "|");
       }
-    }
+    } else {
+      count = i;
+    } 
+
     *outRegex = out;
+    printf ("\n free temp_reg_topic");
     streams_topic_free(temp_reg_topic, count);
   }
   return match;
@@ -284,6 +294,7 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
         &streams_topic_count,
         &regex_topic_count);
 
+  printf ("\n topic_validity : %d ", topic_validity);
 	switch (topic_validity) {
 
 	case -1:
@@ -353,9 +364,9 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		else
 			*is_kafka_subscribe = true;
-		streams_topic_regex_list_free(streams_topics, streams_topic_count,
+/*		streams_topic_regex_list_free(streams_topics, streams_topic_count,
                                   regex_topics, regex_topic_count);
-    break;
+  */  break;
 
 	default:
     streams_topic_regex_list_free(streams_topics, streams_topic_count,

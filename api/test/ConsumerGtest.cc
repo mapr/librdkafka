@@ -45,7 +45,7 @@ protected:
   char *strName ;
   virtual void SetUp() {
     strName = "/gtest-ConsumerTest";
-    stream_create(strName, 1/*Num of Streams*/, 1/*Default Partitions*/);
+    stream_create(strName, 2/*Num of Streams*/, 4/*Default Partitions*/);
     sleep (1);
   }
   virtual void TearDown() {
