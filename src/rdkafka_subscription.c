@@ -268,7 +268,7 @@ void streams_get_topic_blacklist_for_stream (rd_kafka_pattern_list_t *blacklist,
       *outStream = combinedStream;
     } else {
       *outStream = NULL;
-      //free (combinedStream);
+      free (combinedStream);
     }
 }
 
