@@ -1036,7 +1036,8 @@ int streams_get_regex_topic_names (rd_kafka_t *rk,
                                                     strlen(topic_name));
           regex_topic_count++;
         } else {
-          if (rd_kafka_pattern_match(&(rk->rk_conf.topic_blacklist), topic_name))
+          if (rk->rk_conf.topic_blacklist && 
+              rd_kafka_pattern_match(rk->rk_conf.topic_blacklist, topic_name))
               continue;
           size_t size = (streams_topic_count+1)*sizeof(char *);
           char **temp_ptr = rd_realloc(temp_topics, size);

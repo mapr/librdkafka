@@ -239,29 +239,31 @@ void streams_get_topic_blacklist_for_stream (rd_kafka_pattern_list_t *blacklist,
     char *combinedStream = malloc (0);
     int count = 0;
     bool isBlackList = false;
-    TAILQ_FOREACH(rkpat, &blacklist->rkpl_head, rkpat_link) {
-      isBlackList = true;
-      int err = 0;
-      err  = streams_get_name_from_full_path(rkpat->rkpat_orig,
+    if (blacklist) {
+      TAILQ_FOREACH(rkpat, &blacklist->rkpl_head, rkpat_link) {
+        isBlackList = true;
+        int err = 0;
+        err  = streams_get_name_from_full_path(rkpat->rkpat_orig,
                                              strlen(rkpat->rkpat_orig),
                                              &stream, &topic);
-      if (err || (strcmp (stream, compareStream) != 0))
-        continue;
+        if (err || (strcmp (stream, compareStream) != 0))
+          continue;
 
-      if (count == 0) {
-        combinedStream = realloc (combinedStream, sizeof (char) *
+        if (count == 0) {
+          combinedStream = realloc (combinedStream, sizeof (char) *
                                         (strlen(stream) + strlen (topic)+1));
-        sprintf (combinedStream, "%s:%s", stream, topic);
-      } else {
-        combinedStream = realloc (combinedStream, sizeof (char) *
+          sprintf (combinedStream, "%s:%s", stream, topic);
+        } else {
+          combinedStream = realloc (combinedStream, sizeof (char) *
                                   (strlen(combinedStream) + strlen (topic)+1));
-        strcat(combinedStream, "|");
-        strcat(combinedStream, topic);
-      }
-      count ++;
-      if (!err) {
-        free (stream);
-        free (topic);
+          strcat(combinedStream, "|");
+          strcat(combinedStream, topic);
+        }
+        count ++;
+        if (!err) {
+          free (stream);
+          free (topic);
+        }
       }
     }
     if(isBlackList) {
@@ -336,7 +338,7 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
         char *str;
         char *blacklist;
         streams_get_name_from_full_path(regex, strlen(regex), &str, NULL);
-        streams_get_topic_blacklist_for_stream (&rk->rk_conf.topic_blacklist,
+        streams_get_topic_blacklist_for_stream (rk->rk_conf.topic_blacklist,
                                                 str, &blacklist);
 
         streams_consumer_subscribe_regex ((const streams_consumer_t) rk->streams_consumer,

@@ -901,11 +901,8 @@ rd_kafka_resp_err_t ConsumerTest::runRegexTest (char *stream1, char *stream2, in
  rd_kafka_topic_partition_list_destroy (tp_list);
  rd_kafka_topic_partition_list_destroy (outList);
 
-//  Librdkafka bug#778: Double free when using "topic.blacklist" setting
-//  with consumer close. Fixed rev: b2368f4
-//
-//  rd_kafka_consumer_close(consumer);
-//  rd_kafka_destroy(consumer);
+  rd_kafka_consumer_close(consumer);
+  rd_kafka_destroy(consumer);
 
   return error;
 }
