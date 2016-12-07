@@ -18,9 +18,9 @@ else
 endif
 
 
-SOURCES  = ConsumerGtest.cc
+SOURCES  = ProducerGtest.cc
 OBJECTS  = $(patsubst %.cc,%.o,$(SOURCES))
-EXECUTABLE= ConsumerGtest$(EXE)
+EXECUTABLE= ProducerGtest$(EXE)
 
 CC=g++
 CFLAGS=-c -Wall -Wwrite-strings -std=c++0x -Wno-write-strings

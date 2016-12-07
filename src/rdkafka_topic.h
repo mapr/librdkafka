@@ -144,15 +144,12 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
-bool streams_is_valid_topic_name (const char * topic_name, bool *isRegex);
+bool streams_is_valid_topic_name (const char * topic_name);
 
 int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 			     char ** streams_topics,
 					 int *tcount);
-int streams_get_regex_topic_names (rd_kafka_t *rk,
-                                   const rd_kafka_topic_partition_list_t *topics,
-                                   char ***streams_topics, char ***regex_topics,
-                                   int *streams_count, int*regex_count);
+
 int streams_get_topic_commit_info (rd_kafka_t *rk,
 				   const rd_kafka_topic_partition_list_t *topics,
 				   streams_topic_partition_t *tp,

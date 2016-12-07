@@ -90,7 +90,6 @@ streams_consumer_subscribe_topics(const streams_consumer_t consumer,
   * subscription (if there is one).
   * \param consumer [IN] : consumer client
   * \param regex [IN] : regex pattern to subscribe
-  * \param topic_blacklist [IN] : regex pattern to ignore
   * \param assign_cb [IN] : callback called when a new topic partition is
   *                         assigned to this listener
   * \param revoke_cb [IN] : callback called when a topic partition is revoked
@@ -114,7 +113,6 @@ streams_consumer_subscribe_topics(const streams_consumer_t consumer,
 STREAMS_API int32_t
 streams_consumer_subscribe_regex(const streams_consumer_t consumer,
                                  const char *regex,
-                                 const char *topic_blacklist,
                                  const streams_rebalance_cb assign_cb,
                                  const streams_rebalance_cb revoke_cb,
                                  void *cb_ctx);

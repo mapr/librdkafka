@@ -210,8 +210,7 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                 int i;
 
                 /* Ignore topics in blacklist */
-                if (rkcg->rkcg_rk->rk_conf.topic_blacklist &&
-		    rd_kafka_pattern_match(rkcg->rkcg_rk->rk_conf.
+                if (rd_kafka_pattern_match(&rkcg->rkcg_rk->rk_conf.
                                            topic_blacklist,
                                            metadata->topics[ti].topic)) {
                         rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "BLACKLIST",

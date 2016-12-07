@@ -826,22 +826,15 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
         {
                 /* Split comma-separated list into individual regex expressions
                  * that are verified and then append to the provided list. */
-                rd_kafka_pattern_list_t **plist;
+                rd_kafka_pattern_list_t *plist;
 
-                plist = _RK_PTR(rd_kafka_pattern_list_t **, conf, prop->offset);
+                plist = _RK_PTR(rd_kafka_pattern_list_t *, conf, prop->offset);
 
-		if (*plist)
-			rd_kafka_pattern_list_destroy(*plist);
+                rd_kafka_pattern_list_clear(plist);
 
-		if (istr) {
-			if (!(*plist =
-			      rd_kafka_pattern_list_new(istr,
-							errstr,
-							errstr_size)))
-				return RD_KAFKA_CONF_INVALID;
-		} else
-			*plist = NULL;
-
+                if (rd_kafka_pattern_list_init(plist, istr,
+                                               errstr, errstr_size) == -1)
+                        return RD_KAFKA_CONF_INVALID;
                 return RD_KAFKA_CONF_OK;
         }
 
@@ -1217,12 +1210,9 @@ static void rd_kafka_anyconf_clear (void *conf,
 
         case _RK_C_PATLIST:
         {
-                rd_kafka_pattern_list_t **plist;
-                plist = _RK_PTR(rd_kafka_pattern_list_t **, conf, prop->offset);
-		if (*plist) {
-			rd_kafka_pattern_list_destroy(*plist);
-			*plist = NULL;
-		}
+                rd_kafka_pattern_list_t *plist;
+                plist = _RK_PTR(rd_kafka_pattern_list_t *, conf, prop->offset);
+                rd_kafka_pattern_list_clear(plist);
         }
         break;
 
@@ -1312,11 +1302,10 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 			break;
                 case _RK_C_PATLIST:
                 {
-                        const rd_kafka_pattern_list_t **plist;
-                        plist = _RK_PTR(const rd_kafka_pattern_list_t **,
+                        const rd_kafka_pattern_list_t *plist;
+                        plist = _RK_PTR(const rd_kafka_pattern_list_t *,
                                         src, prop->offset);
-			if (*plist)
-				val = (*plist)->rkpl_orig;
+                        val = plist->rkpl_orig;
                         break;
                 }
 		default:
@@ -1602,11 +1591,10 @@ rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
 
         case _RK_C_PATLIST:
         {
-                const rd_kafka_pattern_list_t **plist;
-                plist = _RK_PTR(const rd_kafka_pattern_list_t **,
+                const rd_kafka_pattern_list_t *plist;
+                plist = _RK_PTR(const rd_kafka_pattern_list_t *,
                                 conf, prop->offset);
-		if (*plist)
-			val = (*plist)->rkpl_orig;
+                val = plist->rkpl_orig;
                 break;
         }
 

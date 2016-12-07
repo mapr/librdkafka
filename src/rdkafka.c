@@ -1405,7 +1405,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 	if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL)
 		return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
-	if (streams_is_valid_topic_name(itopic->rkt_topic->str, NULL)) {
+	if (streams_is_valid_topic_name(itopic->rkt_topic->str)) {
 		if(itopic->rkt_rk->kafka_producer)
 			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
@@ -1660,7 +1660,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 
 	if (partition == RD_KAFKA_PARTITION_UA)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
-  if( streams_is_valid_topic_name(rkt->rkt_topic->str, NULL)) {
+  if( streams_is_valid_topic_name(rkt->rkt_topic->str)) {
     err = streams_rd_kafka_seek_wrapper (rkt, partition, offset);
   } else {
 	rd_kafka_topic_rdlock(rkt);
@@ -2049,7 +2049,7 @@ int streams_rd_kafka_committed_wrapper (rd_kafka_t *rk,
       int i;
       for (i=0; i < topics->cnt; i++) {
         const char *topic_name =  (topics->elems[i]).topic;
-        if (streams_is_valid_topic_name(topic_name, NULL)) {
+        if (streams_is_valid_topic_name(topic_name)) {
 
           streams_topic_partition_t tp;
           streams_topic_partition_create(topic_name,
@@ -2154,7 +2154,7 @@ streams_rd_kafka_position_wrapper (rd_kafka_t *rk,
   for (i=0; i < partitions->cnt; i++) {
     const char *topic_name =  (partitions->elems[i]).topic;
     int64_t offset = RD_KAFKA_OFFSET_INVALID;
-    if (streams_is_valid_topic_name(topic_name, NULL)) {
+    if (streams_is_valid_topic_name(topic_name)) {
       streams_topic_partition_create(topic_name,(partitions->elems[i]).partition,
                                                   &streams_tps[i]);
       int32_t retVal = 0;
