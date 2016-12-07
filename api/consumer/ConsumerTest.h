@@ -8,7 +8,8 @@ class ConsumerTest {
     static int runConsumerCreateTest(bool isConfValid, bool isTypeValid);
     static int runSubscribeTest(char *strName, int numStreams, int numTopics,
                                 int nParts, bool isConsumerValid, int consumerType,
-                                int topicType, const char *group, bool isAssign);
+                                int topicType, const char *group, bool isAssign,
+                                char *cDefaultStr);
     static uint64_t runPollTest(char *path, int nstreams, int ntopics,int nparts,
                               int nmsgs, int msgsize, int flag,
                               bool roundRb, int nslowtopics, bool print,

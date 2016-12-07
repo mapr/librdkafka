@@ -49,7 +49,7 @@ protected:
     sleep (1);
   }
   virtual void TearDown() {
-    stream_delete(strName, 1);
+    stream_delete(strName, 2);
   }
 };
 
@@ -149,59 +149,71 @@ TEST(ConsumerTest, consumerCreateInvalidArgTest) {
 
 TEST_F(SubscribeTest, maprConsumerDefaultSubscribeTest) {
   EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 1, 1, 1, true,
-                                                     0, 0, "ConsumerTest", false ));
+                                                     0, 0, "ConsumerTest",
+                                                     false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerDefaultSubscribeTest) {
   EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
-                                                     0, 1, "ConsumerTest", false ));
+                                                     0, 1, "ConsumerTest",
+                                                     false, NULL ));
 }
 TEST_F(SubscribeTest, maprConsumerInvalidTypeSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
-                                      0, 0, "ConsumerTest", false ));
+                                      0, 0, "ConsumerTest",
+                                      false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerInvalidTypeSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
-                                      0, 1, "ConsumerTest", false ));
+                                      0, 1, "ConsumerTest",
+                                      false, NULL ));
 }
 TEST_F(SubscribeTest, maprConsumerInvalidGroupSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
-                                      0, 0, NULL, false ));
+                                      0, 0, NULL,
+                                      false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerInvalidGroupSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
-                                      0, 1, NULL, false ));
+                                      0, 1, NULL,
+                                      false, NULL ));
 }
 TEST_F(SubscribeTest, maprConsumerMaprTopicSubscribeTest) {
   EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
-                                                     1, 0, "ConsumerTest", false));
+                                                     1, 0, "ConsumerTest",
+                                                     false, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerKafkaTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                                     1, 1, "ConsumerTest", false));
+                                                     1, 1, "ConsumerTest",
+                                                     false, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerMixedTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                                     1, 2, "ConsumerTest", false));
+                                                     1, 2, "ConsumerTest",
+                                                     false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerKafkaTopicSubscribeTest) {
   EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                                     2, 1, "ConsumerTest", false));
+                                                     2, 1, "ConsumerTest",
+                                                     false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMaprTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                                     2, 0, "ConsumerTest", false));
+                                                     2, 0, "ConsumerTest",
+                                                     false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMixedTopicSubscribeTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                                     2, 2, "ConsumerTest", false));
+                                                     2, 2, "ConsumerTest",
+                                                     false, NULL));
 }
 
 /*-----------------------------------------------*/
@@ -210,50 +222,56 @@ TEST_F(SubscribeTest, kafkaConsumerMixedTopicSubscribeTest) {
 
 TEST_F(SubscribeTest, maprConsumerDefaultAssignTest) {
   EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 1, 1, 1, true,
-                                                     0, 0, "ConsumerTest", true));
+                                                     0, 0, "ConsumerTest",
+                                                     true, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerDefaultAssignTest) {
   EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
-                                                     0, 1, "ConsumerTest", true));
+                                                     0, 1, "ConsumerTest",
+                                                     true, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerInvalidTypeAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
-                                      0, 0, "ConsumerTest", true));
+                                      0, 0, "ConsumerTest",
+                                      true, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerInvalidTypeAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, false,
-                                      0, 1, "ConsumerTest", true));
+                                      0, 1, "ConsumerTest",
+                                      true, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerInvalidGroupAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
-                                      0, 0, NULL, true));
+                                      0, 0, NULL,
+                                      true, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerInvalidGroupAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
       ConsumerTest::runSubscribeTest (strName,1, 1, 1, true,
-                                      0, 1, NULL, true));
+                                      0, 1, NULL,
+                                      true, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerMaprTopicAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
-                                                     1, 0, "ConsumerTest", true));
+                                                     1, 0, "ConsumerTest", true, NULL));
 }
 TEST_F(SubscribeTest, DISABLED_maprConsumerKafkaTopicAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                      2, 1, "ConsumerTest", true));
+                                      2, 1, "ConsumerTest", true, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMaprTopicAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                      2, 0, "ConsumerTest", true));
+                                      2, 0, "ConsumerTest", true, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMixedTopicAssignTest) {
   EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
-                                      2, 2, "ConsumerTest", true));
+                                      2, 2, "ConsumerTest", true, NULL));
 }
 
 /*-----------------------------------------------*/
@@ -262,17 +280,17 @@ TEST_F(SubscribeTest, kafkaConsumerMixedTopicAssignTest) {
 TEST(ConsumerTest, consumerPollSingleMsgTest) {
   consumer_poll_test_case (STREAM_POLL,1, 1, 1, 1, 200,
                            RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
-                           "consumerPollSingleMsgTestGr", true, true, false );
+                           "consumerPollSingleMsgTestGr", true, true, true );
 }
 TEST(ConsumerTest, consumerPollMultiStreamTest) {
   consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200,
                            RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
-                           "consumerPollMultiStreamTestGr", true, true, false );
+                           "consumerPollMultiStreamTestGr", true, true, true );
 }
 TEST(ConsumerTest, consumerPollMediumSizeMsgTest) {
     consumer_poll_test_case (STREAM_POLL, 2, 4, 2, 100, 9*1024*1024/10,
                              RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
-                             "consumerPollMediumMsgTestGr", true, true, false );
+                             "consumerPollMediumMsgTestGr", true, true, true );
 }
 /*  librdkafka default msg size : 1000000
  *  TODO: Fix after config api is done

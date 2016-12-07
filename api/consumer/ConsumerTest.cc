@@ -41,6 +41,7 @@ int ConsumerTest::runConsumerCreateTest(bool isConfValid,
 
 void populateTopicPartitionList (char *strName, int numStreams, int numTopics,
                                 int numPartitions, int topicType, bool isAssign,
+                                char *cDefaultStr,
                                 unordered_map <string, int, keyHasher> *subscrMap,
                                 rd_kafka_topic_partition_list_t **outList) {
   for (int s = 0; s <  numStreams; ++s) {
@@ -48,7 +49,10 @@ void populateTopicPartitionList (char *strName, int numStreams, int numTopics,
       char currentName[100];
       memset ( currentName, '\0', 100);
       int tempIndex = s* numTopics + t;
-      switch (topicType)  {
+      if (cDefaultStr) {
+        sprintf(currentName, "topic%d", t);
+      } else {
+        switch (topicType)  {
         case 0: sprintf(currentName, "%s%d:topic%d",  strName, s, t);
                 break;
         case 1: sprintf(currentName, "%s%dtopic%d",  strName, s, t);
@@ -59,16 +63,28 @@ void populateTopicPartitionList (char *strName, int numStreams, int numTopics,
                 else
                   sprintf(currentName, "%s%dtopic%d",  strName, s, t);
                 break;
+        }
       }
+      char temp[200];
       if(isAssign) {
         for(int p = 0; p < numPartitions ; ++p ) {
+          memset(temp, 0, 200);
           rd_kafka_topic_partition_list_add(*outList, currentName , p);
-          char temp[200];
-          sprintf(temp, "%s:%d", currentName, p);
+          if(cDefaultStr)
+            sprintf(temp, "%s0:%s:%d",cDefaultStr, currentName, p);
+          else
+            sprintf(temp, "%s:%d", currentName, p);
           if (subscrMap) (*subscrMap)[temp] = 1;
         }
       } else {
-          if (subscrMap) (*subscrMap)[currentName] = 1;
+          if(cDefaultStr) {
+            memset(temp, 0, 200);
+            sprintf(temp, "%s0:%s",cDefaultStr, currentName);
+            if (subscrMap) (*subscrMap)[temp] = 1;
+          } else {
+            if (subscrMap) (*subscrMap)[currentName] = 1;
+          }
+
           rd_kafka_topic_partition_list_add(*outList, currentName,
                                             RD_KAFKA_PARTITION_UA);
       }
@@ -105,9 +121,9 @@ void subscribe_consumer (char *strName, rd_kafka_t *consumer,
   rd_kafka_topic_partition_list_t *init_list =
                                          rd_kafka_topic_partition_list_new(1);
   if (kafkaConsumer)
-    populateTopicPartitionList(strName, 1, 1, 1, 1, false, subscrMap, &init_list);
+    populateTopicPartitionList(strName, 1, 1, 1, 1, false, NULL, subscrMap, &init_list);
   else
-    populateTopicPartitionList(strName, 1, 1, 1, 0, false, subscrMap, &init_list);
+    populateTopicPartitionList(strName, 1, 1, 1, 0, false, NULL, subscrMap, &init_list);
 
   rd_kafka_subscribe(consumer, init_list);
   rd_kafka_topic_partition_list_destroy (init_list);
@@ -136,10 +152,18 @@ void rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
 int ConsumerTest::runSubscribeTest (char *strName, int numStreams, int numTopics,
                                     int numPartitions, bool isConsumerValid,
                                     int consumerType, int topicType,
-                                    const char *groupId, bool isAssign) {
+                                    const char *groupId, bool isAssign,
+                                    char *cDefaultStr) {
     rd_kafka_t *consumer;
     rd_kafka_conf_t *conf = rd_kafka_conf_new();
     char errstr[128];
+    if (cDefaultStr) {
+    char cStr[strlen(cDefaultStr) +1];
+    memset (cStr, 0, strlen(cDefaultStr) +1);
+    sprintf (cStr, "%s0", cDefaultStr);
+    rd_kafka_conf_set(conf, "streams.consumer.default.stream", cStr,
+                      errstr, sizeof(errstr));
+    }
     if (groupId)
       rd_kafka_conf_set(conf, "group.id", groupId, errstr, sizeof(errstr));
     rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
@@ -162,19 +186,19 @@ int ConsumerTest::runSubscribeTest (char *strName, int numStreams, int numTopics
     switch (topicType) {
     case 0: // All Mapr topics
             populateTopicPartitionList(strName, numStreams, numTopics,
-                                       numPartitions, 0, isAssign, &subscrMap,
+                                       numPartitions, 0, isAssign, cDefaultStr, &subscrMap,
                                        &tp_list);
             break;
 
     case 1: // All kafka topics
             populateTopicPartitionList(strName, numStreams, numTopics,
-                                       numPartitions, 1, isAssign, &subscrMap,
+                                       numPartitions, 1, isAssign, cDefaultStr, &subscrMap,
                                        &tp_list);
             break;
 
     case 2: // Mixed topics
             populateTopicPartitionList(strName, numStreams, numTopics,
-                                       numPartitions, 2, isAssign, &subscrMap,
+                                       numPartitions, 2, isAssign, cDefaultStr, &subscrMap,
                                        &tp_list);
             break;
     default:
@@ -237,6 +261,10 @@ int ConsumerTest::runUnsubscribeTest (char *path, int nstreams, int ntopics,
         rd_kafka_conf_set(conf, "group.id", groupid, errstr, sizeof(errstr));
 
   rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
+  rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
   std::unordered_map<std::basic_string<char>, int, keyHasher> subscrMap;
   //Subscribe to topics
@@ -244,7 +272,7 @@ int ConsumerTest::runUnsubscribeTest (char *path, int nstreams, int ntopics,
   rd_kafka_topic_partition_list_t *tp_list =
                                     rd_kafka_topic_partition_list_new(nTotalTp);
   populateTopicPartitionList(path, nstreams, ntopics,
-                                       nparts, 0, false, &subscrMap, &tp_list);
+                                       nparts, 0, false, NULL,  &subscrMap, &tp_list);
   rd_kafka_subscribe (consumer, tp_list);
   int totalMsgs = nstreams * ntopics * nparts * nmsgs;
   //start consuming
@@ -343,6 +371,11 @@ void *createAndStartConsumer (void *thArg) {
   ctx->subscribedList = rd_kafka_topic_partition_list_new(0);
   rd_kafka_conf_set_opaque(conf, ctx);
   rd_kafka_conf_set_rebalance_cb(conf, assign_revoke_rebalance_cb_test);
+
+  rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
 
   rd_kafka_topic_partition_list_t *tp_list =
@@ -470,6 +503,10 @@ int ConsumerTest::runCommitTest (char * strName, const char *groupid,
   char errstr[128];
   rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
   rd_kafka_conf_set(conf, "group.id", groupid , errstr, sizeof(errstr));
+  rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
+                          errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
 
   rd_kafka_topic_partition_list_t *tp_list =
@@ -532,6 +569,10 @@ int ConsumerTest::runConsumerCloseTest (char *strName, char * groupid,
   rd_kafka_conf_t *conf = rd_kafka_conf_new();
   char errstr[128];
   rd_kafka_conf_set(conf, "group.id", groupid , errstr, sizeof(errstr));
+  rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
   subscribe_consumer (strName, consumer, NULL, false /*kafkaConsumer*/);
   int msgCount = 0;
@@ -625,6 +666,10 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid,
   char errstr[128];
   rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
   rd_kafka_conf_set(conf, "group.id", groupid , errstr, sizeof(errstr));
+  rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
 
   rd_kafka_topic_partition_list_t *tp_list =

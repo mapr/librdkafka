@@ -163,9 +163,13 @@ uint64_t Consumer::run() {
 
 	struct RebalanceCbCtx	rb_ctx;
 	rd_kafka_conf_set_opaque(conf, &rb_ctx);
-	rd_kafka_conf_set(conf, "auto.offset.reset", "earliest",
+
+  rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
+
+	rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
                                     errstr, sizeof(errstr));
 
+  rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
 	if (!(consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
                                     errstr, sizeof(errstr)))) {
 	return CONSUMER_CREATE_FAILED;

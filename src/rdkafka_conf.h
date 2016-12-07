@@ -225,6 +225,12 @@ struct rd_kafka_conf_s {
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;
+
+  /*MapR-Streams specific config*/
+  char *streams_producer_default_stream_name;
+  char *streams_consumer_default_stream_name;
+  bool streams_parallel_flushers_per_partition;
+
 };
 
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);
@@ -269,3 +275,4 @@ struct rd_kafka_topic_conf_s {
 
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
+void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *config);

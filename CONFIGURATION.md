@@ -87,6 +87,9 @@ batch.num.messages                       |  P  | 1 .. 1000000    |          1000
 delivery.report.only.error               |  P  | true, false     |         false | Only provide delivery reports for failed messages. <br>*Type: boolean*
 dr_cb                                    |  P  |                 |               | Delivery report callback (set with rd_kafka_conf_set_dr_cb()) <br>*Type: pointer*
 dr_msg_cb                                |  P  |                 |               | Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb()) <br>*Type: pointer*
+streams.producer.default.stream          |  P  |                 |               | Producer default stream name, if configured requests will always go to mapr streams. This default stream name is prepended to the provided topic name <br>*Type: string*
+streams.consumer.default.stream          |  C  |                 |               | Consumer default stream name, if configured requests will always go to maprstreams. This default stream name is prepended to the provided topic name <br>*Type: string*
+streams.parallel.flushers.per.partition  |  P  | true, false     |          true | If enabled, producer may have multiple parallel send requests to the server for each topic partition. If this setting is set to true, it is possible for messages to be sent out of order. <br>*Type: boolean*
 
 
 ## Topic configuration properties

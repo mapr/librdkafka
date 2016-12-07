@@ -601,6 +601,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_msg_cb", _RK_C_PTR,
 	  _RK(dr_msg_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
+  { _RK_GLOBAL|_RK_PRODUCER, "streams.producer.default.stream", _RK_C_STR,
+    _RK(streams_producer_default_stream_name),
+    "Producer default stream name, if configured requests will always go to mapr"
+    " streams. This default stream name is prepended to the provided topic name"},
+  { _RK_GLOBAL|_RK_CONSUMER, "streams.consumer.default.stream", _RK_C_STR,
+    _RK(streams_consumer_default_stream_name),
+    "Consumer default stream name, if configured requests will always go to mapr"
+    "streams. This default stream name is prepended to the provided topic name"},
+  { _RK_GLOBAL|_RK_PRODUCER, "streams.parallel.flushers.per.partition", _RK_C_BOOL,
+    _RK(streams_parallel_flushers_per_partition),
+    "If enabled, producer may have multiple parallel send requests to the server"
+    " for each topic partition. If this setting is set to true, it is possible"
+    " for messages to be sent out of order.",
+    0, 1, 1 },
 
 
         /*
@@ -1843,4 +1857,63 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 	}
 	fprintf(fp, "\n");
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");
+}
+
+void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *config) {
+  //create default stream config.
+  streams_config_create (config);
+  //map and set librdkafka config to streams.
+  rd_kafka_conf_t conf = rk->rk_conf;
+  if (conf.client_id_str)
+    streams_config_set (*config, "client.id", conf.client_id_str);
+
+
+  /* Producer configs*/
+  char t_ms_str[16];
+  memset (t_ms_str, 0, sizeof(t_ms_str));
+  snprintf(t_ms_str, sizeof (t_ms_str), "%d", conf.metadata_refresh_fast_cnt);
+  streams_config_set (*config, "metadata.max.age.ms", t_ms_str);
+
+  if (conf.streams_producer_default_stream_name)
+    streams_config_set (*config, "streams.producer.default.stream",
+                        conf.streams_producer_default_stream_name);
+
+  memset (t_ms_str, 0, sizeof(t_ms_str));
+  snprintf(t_ms_str, sizeof (t_ms_str), "%d", conf.buffering_max_ms);
+  streams_config_set (*config, "streams.buffer.max.time.ms", t_ms_str);
+
+  streams_config_set (*config, "streams.parallel.flushers.per.partition",
+                      conf.streams_parallel_flushers_per_partition?"true":"false");
+  //TODO: conf.max_msg_size
+  char size_str[16];
+  memset (size_str, 0, sizeof(size_str));
+  snprintf(size_str, sizeof (size_str), "%d", conf.max_msg_size);
+  streams_config_set (*config, "message.max.bytes", size_str);
+
+  /* Consumer configs*/
+  if (conf.group_id_str)
+    streams_config_set (*config, "group.id", conf.group_id_str);
+
+  streams_config_set (*config, "enable.auto.commit",
+                      conf.enable_auto_commit?"true":"false");
+
+  memset (t_ms_str, 0, sizeof(t_ms_str));
+  snprintf(t_ms_str, sizeof (t_ms_str), "%d", conf.auto_commit_interval_ms);
+  streams_config_set (*config, "auto.commit.interval.ms", t_ms_str);
+
+  if (conf.topic_conf) {
+   char offset_str[16];
+   if (conf.topic_conf->auto_offset_reset == RD_KAFKA_OFFSET_BEGINNING)
+     snprintf (offset_str, sizeof (offset_str), "earliest" );
+   else if (conf.topic_conf->auto_offset_reset == RD_KAFKA_OFFSET_END)
+     snprintf (offset_str, sizeof (offset_str), "largest" );
+   else if (conf.topic_conf->auto_offset_reset == RD_KAFKA_OFFSET_INVALID)
+     printf("NOT SUPPORTED");//throw error?
+
+   streams_config_set (*config, "auto.offset.reset", offset_str);
+  }
+
+  if (conf.streams_consumer_default_stream_name)
+    streams_config_set (*config, "streams.consumer.default.stream",
+                        conf.streams_consumer_default_stream_name);
 }

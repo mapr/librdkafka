@@ -146,19 +146,10 @@ static void streams_revoke_rebalance_wrapper_cb ( streams_topic_partition_t *top
 void streams_consumer_create_wrapper(rd_kafka_t *rk) {
 	//create streams config
 	streams_config_t config;
-	streams_config_create(&config);
-	char *group_id = (rk->rk_conf).group_id->str;
-	if (group_id == NULL) {
+	streams_kafka_mapped_streams_config_set (rk, &config);
+	if (!(rk->rk_conf).group_id->str)
 		return;
-  }
 
-	streams_config_set(config, "group.id", group_id);
-	//TODO: Set correct conf for auto.offset.reset
-	streams_config_set(config, "auto.offset.reset", "earliest");
-	char *autoCommit = "true";
-	if(!(rk->rk_conf).enable_auto_commit)
-		autoCommit = "false";
-	streams_config_set(config, "enable.auto.commit", autoCommit);
 	//create streams consumer
 	streams_consumer_t consumer;
 	streams_consumer_create(config, &consumer);
@@ -181,9 +172,9 @@ bool streams_check_regex_for_same_stream_and_combine (char **regex_topics,
   bool match = false;
   if(regex_topics){
     int i, err = 0;
-    char *temp_reg_stream;
-    char **temp_reg_topic= (char **)malloc (count * sizeof (char*));
-    char *out;
+    char *temp_reg_stream = NULL;
+    char **temp_reg_topic = (char **)malloc (count * sizeof (char*));
+    char *out = NULL;
     int totalLen = 0;
 
     for (i = 0; i < count; i++) {
@@ -274,6 +265,28 @@ void streams_get_topic_blacklist_for_stream (rd_kafka_pattern_list_t *blacklist,
     }
 }
 
+void streams_update_topic_list(rd_kafka_t *rk, char *default_str,
+                              const rd_kafka_topic_partition_list_t *topics,
+                              rd_kafka_topic_partition_list_t **updated_topics) {
+  //copy the complete list to populate all the elements on the data structure
+  int i;
+  *updated_topics = rd_kafka_topic_partition_list_copy (topics);
+  for (i = 0 ; i < (*updated_topics)->cnt ; i++) {
+    char *curr_t_name =  (*updated_topics)->elems[i].topic;
+    if (curr_t_name[0] == '/')
+      continue;
+
+    int new_t_len = strlen (default_str) +
+                1 + // for ':'
+                strlen (curr_t_name) +
+                1; // for '\0'
+
+    char new_t_str[new_t_len];
+    snprintf(new_t_str, new_t_len, "%s:%s", default_str, curr_t_name);
+    (*updated_topics)->elems[i].topic = rd_strdup(new_t_str);
+  }
+}
+
 rd_kafka_resp_err_t
 streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 																		const rd_kafka_topic_partition_list_t *topics,
@@ -285,7 +298,15 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 
   int streams_topic_count = 0;
   int regex_topic_count = 0;
-  int topic_validity = streams_get_regex_topic_names(rk, topics,
+  rd_kafka_topic_partition_list_t *updated_topics;
+  if(rk->rk_conf.streams_consumer_default_stream_name) {
+    streams_update_topic_list(rk,
+                              rk->rk_conf.streams_consumer_default_stream_name,
+                              topics, &updated_topics);
+  } else {
+    updated_topics = rd_kafka_topic_partition_list_copy (topics);
+  }
+  int topic_validity = streams_get_regex_topic_names(rk, updated_topics,
         &streams_topics, &regex_topics,
         &streams_topic_count,
         &regex_topic_count);
@@ -355,6 +376,9 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 		//all kafka topics
 		streams_topic_regex_list_free(streams_topics, streams_topic_count,
                                   regex_topics, regex_topic_count);
+
+    if (rk->rk_conf.streams_consumer_default_stream_name)
+      return RD_KAFKA_RESP_ERR__INVALID_ARG;
     if (is_streams_consumer(rk))
 			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		else
@@ -407,14 +431,23 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
   int streams_topic_count = 0;
   int kafka_topic_count = 0;
   int i;
+
+  rd_kafka_topic_partition_list_t *updated_topics;
+  if(rk->rk_conf.streams_consumer_default_stream_name) {
+    streams_update_topic_list(rk,
+                              rk->rk_conf.streams_consumer_default_stream_name,
+                              topics, &updated_topics);
+  } else {
+    updated_topics = rd_kafka_topic_partition_list_copy (topics);
+  }
+
   streams_topic_partition_t *streams_tps =
-           rd_malloc(topics->cnt * sizeof(streams_topic_partition_t));
-  //streams_topic_partition_t streams_tps[topics->cnt];
+           rd_malloc(updated_topics->cnt * sizeof(streams_topic_partition_t));
   for (i=0; i < topics->cnt; i++) {
-    const char *topic_name =  (topics->elems[i]).topic;
+    const char *topic_name =  (updated_topics->elems[i]).topic;
     if (streams_is_valid_topic_name(topic_name, NULL)) {
 
-      streams_topic_partition_create(topic_name, (topics->elems[i]).partition,
+      streams_topic_partition_create(topic_name, (updated_topics->elems[i]).partition,
                                                   &streams_tps[i]);
       streams_topic_count++;
     } else {
@@ -465,7 +498,8 @@ rd_kafka_assign (rd_kafka_t *rk,
 
         err = streams_rd_kafka_assign_wrapper (rk, partitions, &is_kafka_assign);
         if(is_kafka_assign) {
-
+          if (rk->rk_conf.streams_consumer_default_stream_name)
+              return RD_KAFKA_RESP_ERR__INVALID_ARG;
           if ( is_streams_consumer(rk))
               return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 

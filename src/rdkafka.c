@@ -1286,11 +1286,9 @@ static void streams_producer_wrapper_cb (int32_t err,
 void streams_producer_create_wrapper (rd_kafka_t *rk) {
 	//create streams config
 	streams_config_t config;
-	streams_config_create(&config);
+  streams_kafka_mapped_streams_config_set (rk, &config);
 
-	//TODO: set ALL relevant kafka config to streams producer config.
-
-	//create streams producer
+  //create streams producer
 	streams_producer_t producer;
 	streams_producer_create(config, &producer);
 
@@ -1350,11 +1348,16 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
 	opaque_wrapper->topic = irkt->rkt_app_rkt;
 	opaque_wrapper->msgflags = msgflags;
 
-	int result = streams_producer_send ((const streams_producer_t) 
+	int result = streams_producer_send ((const streams_producer_t)
 					    irkt->rkt_rk->streams_producer,
 					    (const streams_producer_record_t) record,
 					    (const streams_producer_cb) streams_producer_wrapper_cb,
 					    opaque_wrapper);
+
+  if (result == 7) { // Streams E2BIG err code (7)
+    //TODO: return -1 and set errNo to RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE
+    result = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+  }
   streams_topic_partition_destroy(tp);
 	return result;
 }
@@ -1389,6 +1392,37 @@ streams_run_partitioner (rd_kafka_topic_t *rkt, const void *key,
   return partition;
 }
 
+int streams_verify_and_send_helper (rd_kafka_topic_t *rkt, int32_t partition,
+                                     int msgflags, void *payload, size_t len,
+                                     const void *key, size_t keylen,
+                                     void *msg_opaque) {
+ rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
+ if (streams_is_valid_topic_name(itopic->rkt_topic->str, NULL)) {
+    if(itopic->rkt_rk->kafka_producer)
+     return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+
+    if (!is_streams_producer(itopic->rkt_rk))
+      streams_producer_create_wrapper(itopic->rkt_rk);
+     /*
+     * TODO: Support partitioner callback.
+     */
+    if (partition == RD_KAFKA_PARTITION_UA)
+        partition = streams_run_partitioner (rkt, key, keylen, msg_opaque);
+
+    //Producing to streams
+    return streams_producer_send_wrapper(itopic,
+                 partition,
+                 msgflags,
+                 key,
+                 keylen,
+                 payload,
+                 len,
+                 msg_opaque );
+  }
+  //kafka topic name;
+  return RD_KAFKA_RESP_ERR__INVALID_ARG;
+}
+
 /**
  * Produce a single message.
  * Locality: any application thread
@@ -1405,28 +1439,15 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 	if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL)
 		return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
-	if (streams_is_valid_topic_name(itopic->rkt_topic->str, NULL)) {
-		if(itopic->rkt_rk->kafka_producer)
-			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
-
-    if (!is_streams_producer(itopic->rkt_rk))
-      streams_producer_create_wrapper(itopic->rkt_rk);
-     /*
-		 * TODO: Support partitioner callback.
-		 */
-		if (partition == RD_KAFKA_PARTITION_UA)
-		    partition = streams_run_partitioner (rkt, key, keylen, msg_opaque);
-
-		//Producing to streams
-	  return streams_producer_send_wrapper(itopic,
-						     partition,
-						     msgflags,
-						     key,
-						     keylen,
-						     payload,
-						     len,
-						     msg_opaque );
+  if(itopic->rkt_rk->rk_conf.streams_producer_default_stream_name) {
+    return streams_verify_and_send_helper (rkt, partition, msgflags, payload,
+                                           len, key, keylen, msg_opaque );
   } else {
+    int err = streams_verify_and_send_helper (rkt, partition, msgflags, payload,
+                                              len, key, keylen, msg_opaque );
+    if (err != RD_KAFKA_RESP_ERR__INVALID_ARG)
+      return err;
+
 		if (is_streams_producer(itopic->rkt_rk))
 			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 		//producing to kafka
@@ -1775,15 +1796,16 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                 return 1;
 
 	rkmessage = rd_kafka_message_get(rko);
-	if (!rko->rko_err) {
-		rd_kafka_toppar_lock(rktp);
-		rktp->rktp_app_offset = rkmessage->offset+1;
-		if (rk->rk_conf.enable_auto_offset_store)
-			rd_kafka_offset_store0(rktp, rkmessage->offset+1,
-					       0/*no lock*/);
-		rd_kafka_toppar_unlock(rktp);
-	}
-
+  if (!is_streams_consumer (rk)) {
+	  if (!rko->rko_err) {
+		  rd_kafka_toppar_lock(rktp);
+		  rktp->rktp_app_offset = rkmessage->offset+1;
+		  if (rk->rk_conf.enable_auto_offset_store)
+			  rd_kafka_offset_store0(rktp, rkmessage->offset+1,
+				0/*no lock*/);
+		  rd_kafka_toppar_unlock(rktp);
+	  }
+  }
 	ctx->consume_cb(rkmessage, ctx->opaque);
 
         return 1;
@@ -1877,10 +1899,14 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 
 	rd_kafka_yield_thread = 0;
         while ((rko = streams_rd_kafka_q_pop_wrapper (rk, rkq, timeout_ms, 0))) {
-                if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
+               if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
                         /* Message was handled by callback. */
+                     if ((rko->rko_type == RD_KAFKA_OP_FETCH)
+                         && (is_streams_consumer(rk))){
+                             streams_rd_kafka_op_destroy_wrapper(rko);
+                     } else {
                         rd_kafka_op_destroy(rko);
-
+                     }
 			if (unlikely(rd_kafka_yield_thread)) {
 				/* Callback called rd_kafka_yield(), we must
 				 * stop dispatching the queue and return. */
@@ -2702,7 +2728,7 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 int rd_kafka_outq_len (rd_kafka_t *rk) {
   int count = 0;
   if (is_streams_producer (rk))
-    streams_producer_send_buffer_get_size( (const) rk->streams_producer, &count);
+    streams_producer_send_buffer_get_size(rk->streams_producer, &count);
   else
     count = rd_atomic32_get(&rk->rk_producer.msg_cnt);
 
