@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #define ARRAY_SIZE(array) (sizeof((array))/sizeof((array[0])))
+#define KAFKA_BROKERS "localhost:9092"
 #ifdef __GNUC__
 #define atomic_add32(ptr, val) __sync_fetch_and_add ((ptr), (val))
 #define atomic_sub32(ptr, val) __sync_fetch_and_sub ((ptr), (val))

@@ -295,6 +295,7 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
   char **streams_topics = rd_malloc(0);
   char **regex_topics = rd_malloc(0);
   char *regex = NULL;
+  int error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
   int streams_topic_count = 0;
   int regex_topic_count = 0;
@@ -313,18 +314,18 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 
 	switch (topic_validity) {
 
-	case -1:
+	case MIX_TOPICS:
     streams_topic_regex_list_free(streams_topics, streams_topic_count,
                                   regex_topics, regex_topic_count);
-    return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;	// TODO: return proper error code
+    return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-	case 0:
+	case STREAMS_TOPICS:
     if (rk->kafka_consumer) {
       streams_topic_regex_list_free(streams_topics, streams_topic_count,
                                   regex_topics, regex_topic_count);
 
       free(regex);
-			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+			return RD_KAFKA_RESP_ERR__INVALID_ARG;
 		}
 		//all streams topics
 		if(regex_topic_count > 0) {
@@ -347,7 +348,7 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 		opaque_wrapper->rk = rk;
     if (streams_topic_count > 0) {
 
-		  streams_consumer_subscribe_topics((const streams_consumer_t) rk->streams_consumer,
+		  error = streams_consumer_subscribe_topics((const streams_consumer_t) rk->streams_consumer,
               (const char**) streams_topics,
               topics->cnt,
               (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
@@ -362,7 +363,7 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
         streams_get_topic_blacklist_for_stream (rk->rk_conf.topic_blacklist,
                                                 str, &blacklist);
 
-        streams_consumer_subscribe_regex ((const streams_consumer_t) rk->streams_consumer,
+        error = streams_consumer_subscribe_regex ((const streams_consumer_t) rk->streams_consumer,
               (const char*) regex,
               (const char*) blacklist,
               (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
@@ -370,29 +371,30 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
               (void *)opaque_wrapper);
       }
     }
-		break;
+    if(error != RD_KAFKA_RESP_ERR_NO_ERROR)
+      error = streams_to_librdkafka_error_converter (error , RD_KAFKA_OP_SUBSCRIBE);
 
-	case 1:
+    break;
+
+	case KAFKA_TOPICS:
 		//all kafka topics
 		streams_topic_regex_list_free(streams_topics, streams_topic_count,
                                   regex_topics, regex_topic_count);
 
-    if (rk->rk_conf.streams_consumer_default_stream_name)
+    if ((rk->rk_conf.streams_consumer_default_stream_name)|| (is_streams_consumer(rk)))
       return RD_KAFKA_RESP_ERR__INVALID_ARG;
-    if (is_streams_consumer(rk))
-			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
-		else
-			*is_kafka_subscribe = true;
-      break;
+    else
+      *is_kafka_subscribe = true;
+    break;
 
 	default:
     streams_topic_regex_list_free(streams_topics, streams_topic_count,
                                   regex_topics, regex_topic_count);
-		rd_dassert (topic_validity >1 || topic_validity < -1);
+		rd_dassert (topic_validity > KAFKA_TOPICS || topic_validity < MIX_TOPICS);
 		break;
 	}
 
-	return RD_KAFKA_RESP_ERR_NO_ERROR;
+	return error;
 }
 
 rd_kafka_resp_err_t
@@ -409,6 +411,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 
 	bool is_kafka_subscribe = false;
 	err = streams_rd_kafka_subscribe_wrapper (rk, topics, &is_kafka_subscribe);
+
   if (is_kafka_subscribe) {
       rk->kafka_consumer = true;
 			rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
@@ -456,14 +459,14 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
 
     if (streams_topic_count!=0 && kafka_topic_count!=0) {
         streams_topic_partition_free (streams_tps, streams_topic_count);
-        return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
     }
   }
 
   if (streams_topic_count > 0 ) {
       if (rk->kafka_consumer) {
           streams_topic_partition_free (streams_tps, streams_topic_count);
-          return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
       }
       //all streams topics
       if(!is_streams_consumer(rk)) {
@@ -473,13 +476,13 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
       err = streams_consumer_assign_partitions (rk->streams_consumer,
                                         streams_tps, streams_topic_count);
       streams_topic_partition_free (streams_tps, streams_topic_count);
-      return err;
+      return streams_to_librdkafka_error_converter (err , RD_KAFKA_OP_ASSIGN);
   } else if (kafka_topic_count > 0 ) {
       streams_topic_partition_free (streams_tps, streams_topic_count);
       *is_kafka_assign = true;
       return 1;
   } else {
-    return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+    return RD_KAFKA_RESP_ERR__INVALID_ARG;
   }
 
 }
@@ -498,10 +501,9 @@ rd_kafka_assign (rd_kafka_t *rk,
 
         err = streams_rd_kafka_assign_wrapper (rk, partitions, &is_kafka_assign);
         if(is_kafka_assign) {
-          if (rk->rk_conf.streams_consumer_default_stream_name)
+          if ((rk->rk_conf.streams_consumer_default_stream_name)
+              || (is_streams_consumer(rk)))
               return RD_KAFKA_RESP_ERR__INVALID_ARG;
-          if ( is_streams_consumer(rk))
-              return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 
           rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
           if (partitions)
@@ -533,8 +535,7 @@ streams_rd_kafka_assignment_wrapper (rd_kafka_t *rk,
                                                   tCount, *partitions );
               return RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
-          //TODO: return correct error after mapping is implemented
-              return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+              return streams_to_librdkafka_error_converter (ret , RD_KAFKA_OP_GET_ASSIGNMENT);
         }
 }
 
@@ -577,16 +578,18 @@ streams_rd_kafka_subscription_wrapper (rd_kafka_t *rk,
   char **streams_topics;
   uint32_t tcount = 0;
 
-  rd_kafka_resp_err_t err =   streams_consumer_get_subscription (rk->streams_consumer,
+  int err =   streams_consumer_get_subscription (rk->streams_consumer,
                                      &streams_topics, &tcount );
   if(!*topics)
     *topics = rd_kafka_topic_partition_list_new(0);
-  if (!err) {
+  if (err == 0) {
     uint32_t i = 0;
     for (i = 0; i < tcount ; i++) {
       rd_kafka_topic_partition_list_add
         (*topics, streams_topics[i], RD_KAFKA_PARTITION_UA);
     }
+  } else {
+    err = streams_to_librdkafka_error_converter ((int)err , RD_KAFKA_OP_GET_SUBSCRIPTION);
   }
   return err;
 }

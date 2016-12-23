@@ -1225,6 +1225,32 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	return rk;
 }
 
+int streams_to_librdkafka_error_converter (int err, rd_kafka_op_type_t op_type) {
+  switch (err) {
+    case EPERM: //Streams EPERM
+            //return topic_auth error code.
+            if ((int)op_type == RD_KAFKA_OP_DR)
+              return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+    case ENOENT: //Streams ENOENT
+            if ((int)op_type == RD_KAFKA_OP_COMMITTED)
+              return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+            if ((int)op_type == RD_KAFKA_OP_POSITION)
+              return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+    case EIO: //Streams EIO
+            break;
+    case E2BIG: //Streams E2BIG
+            return EMSGSIZE;
+    case EINVAL: //Streams EINVAL
+            if ((int)op_type == RD_KAFKA_OP_DR)
+              return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+            else
+              return RD_KAFKA_RESP_ERR__INVALID_ARG;
+    default:
+            break;
+  }
+  return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 static void streams_producer_wrapper_cb (int32_t err,
 					streams_producer_record_t record,
 					int partitionid,
@@ -1236,19 +1262,21 @@ static void streams_producer_wrapper_cb (int32_t err,
 
 	//check for configured callback for message produced.
 	rd_kafka_msg_t *rkm;
-	const void *str_produced;
-	const void *key;
+	const void *str_produced = NULL;
+	const void *key = NULL;
 	uint32_t msglen, keylen;
-
+  if (record) {
 	streams_producer_record_get_value (record,
 						   &str_produced,
 						   &msglen);
 	streams_producer_record_get_key (record,
 						 &key,
 						 &keylen);
-
+  }
 	if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
-			(!rk->rk_conf.dr_err_only || err)) {
+			(!rk->rk_conf.dr_err_only || err) && (err !=  E2BIG)) {
+    if (err)
+     err = streams_to_librdkafka_error_converter(err, RD_KAFKA_OP_DR);
 		if (wrapper_cb_ctx->topic != NULL) {
 			rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(wrapper_cb_ctx->topic);
 			streams_message_create (itopic,
@@ -1261,8 +1289,9 @@ static void streams_producer_wrapper_cb (int32_t err,
 						wrapper_cb_ctx->msg_opaque,
 						(rd_kafka_resp_err_t) err,
 						&rkm);
+      rkm->rkm_offset = offset;
 		} else {
-			err = RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		}
 
 		rd_kafka_op_t *rko;
@@ -1275,11 +1304,11 @@ static void streams_producer_wrapper_cb (int32_t err,
 		rd_kafka_q_enq (&rk->rk_rep, rko);
 	} else {
 		if ( wrapper_cb_ctx->msgflags != 0) {
-		rd_free ((char *)str_produced);
-		if(key) rd_free ((char *)key);
+		  if(str_produced) rd_free ((char *)str_produced);
+		  if(key) rd_free ((char *)key);
 	  }
   }
-	streams_producer_record_destroy(record);
+	if (record) streams_producer_record_destroy(record);
 	rd_free(wrapper_cb_ctx);
 };
 
@@ -1305,10 +1334,8 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
 				  void *payload,
 				  size_t len,
 				  void *msg_opaque) {
-  if(irkt==NULL || irkt->rkt_topic == NULL || irkt->rkt_topic->str == NULL)
-    return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 	//Create streams producer record
-	streams_topic_partition_t tp; 
+	streams_topic_partition_t tp;
   streams_topic_partition_create(irkt->rkt_topic->str,
 				       partition,
 				       &tp);
@@ -1330,34 +1357,37 @@ int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
   } else {
     copyKey = key;
   }
+  int result = 0;
 	streams_producer_record_t record;
-	streams_producer_record_create(tp,
-				       (const char *)copyKey,
-				       keylen,
-				       (void *)copyPayload,
-				       len,
-				       &record);
+	  //Create streams producer callback context
+	  //TODO: Create wrapper per topic partition instaed of per message, and reuse it.
+	  streams_producer_callback_ctx *opaque_wrapper;
+	  size_t ctxlen = sizeof(*opaque_wrapper);
+	  opaque_wrapper = rd_malloc(ctxlen);
+	  opaque_wrapper->rk = irkt->rkt_rk;
+	  opaque_wrapper->msg_opaque = msg_opaque;
+	  opaque_wrapper->topic = irkt->rkt_app_rkt;
+	  opaque_wrapper->msgflags = msgflags;
 
-	//Create streams producer callback context
-	//TODO: Create wrapper per topic partition instaed of per message, and reuse it.
-	streams_producer_callback_ctx *opaque_wrapper;
-	size_t ctxlen = sizeof(*opaque_wrapper);
-	opaque_wrapper = rd_malloc(ctxlen);
-	opaque_wrapper->rk = irkt->rkt_rk;
-	opaque_wrapper->msg_opaque = msg_opaque;
-	opaque_wrapper->topic = irkt->rkt_app_rkt;
-	opaque_wrapper->msgflags = msgflags;
-
-	int result = streams_producer_send ((const streams_producer_t)
+  if (streams_producer_record_create(tp, (const char *)copyKey, keylen,
+				                       (void *)copyPayload, len, &record) == 0) {
+	  result = streams_producer_send ((const streams_producer_t)
 					    irkt->rkt_rk->streams_producer,
 					    (const streams_producer_record_t) record,
 					    (const streams_producer_cb) streams_producer_wrapper_cb,
-					    opaque_wrapper);
+					      opaque_wrapper);
 
-  if (result == 7) { // Streams E2BIG err code (7)
-    //TODO: return -1 and set errNo to RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE
-    result = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+    if (result == E2BIG ) {
+      result = streams_to_librdkafka_error_converter(result, RD_KAFKA_OP_DR);
+    } else if (result != 0) {
+      result = 0;
+    } else {}
+
+  } else {
+    streams_producer_wrapper_cb (RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                NULL, partition, 0, opaque_wrapper);
   }
+
   streams_topic_partition_destroy(tp);
 	return result;
 }
@@ -1398,9 +1428,10 @@ int streams_verify_and_send_helper (rd_kafka_topic_t *rkt, int32_t partition,
                                      void *msg_opaque) {
  rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
  if (streams_is_valid_topic_name(itopic->rkt_topic->str, NULL)) {
-    if(itopic->rkt_rk->kafka_producer)
-     return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
-
+    if(itopic->rkt_rk->kafka_producer) {
+	    rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+      return -1;
+    }
     if (!is_streams_producer(itopic->rkt_rk))
       streams_producer_create_wrapper(itopic->rkt_rk);
      /*
@@ -1410,7 +1441,7 @@ int streams_verify_and_send_helper (rd_kafka_topic_t *rkt, int32_t partition,
         partition = streams_run_partitioner (rkt, key, keylen, msg_opaque);
 
     //Producing to streams
-    return streams_producer_send_wrapper(itopic,
+    int err = streams_producer_send_wrapper(itopic,
                  partition,
                  msgflags,
                  key,
@@ -1418,9 +1449,18 @@ int streams_verify_and_send_helper (rd_kafka_topic_t *rkt, int32_t partition,
                  payload,
                  len,
                  msg_opaque );
+
+	    if ( err != 0 ){
+        rd_kafka_set_last_error (rd_kafka_errno2err(err), err);
+        return -1;
+      } else {
+        rd_kafka_set_last_error (0, 0);
+        return 0;
+      }
   }
   //kafka topic name;
-  return RD_KAFKA_RESP_ERR__INVALID_ARG;
+  //TODO: Change this error- add new
+  return RD_KAFKA_RESP_ERR__FAIL;
 }
 
 /**
@@ -1436,8 +1476,10 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		      size_t keylen,
 		      void *msg_opaque) {
 	rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
-	if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL)
-		return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+	if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL){
+	  rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+    return -1;
+  }
 
   if(itopic->rkt_rk->rk_conf.streams_producer_default_stream_name) {
     return streams_verify_and_send_helper (rkt, partition, msgflags, payload,
@@ -1445,11 +1487,13 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
   } else {
     int err = streams_verify_and_send_helper (rkt, partition, msgflags, payload,
                                               len, key, keylen, msg_opaque );
-    if (err != RD_KAFKA_RESP_ERR__INVALID_ARG)
+    if (err != RD_KAFKA_RESP_ERR__FAIL)
       return err;
 
-		if (is_streams_producer(itopic->rkt_rk))
-			return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+		if (is_streams_producer(itopic->rkt_rk)) {
+      rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+      return -1;
+    }
 		//producing to kafka
     itopic->rkt_rk->kafka_producer = true;
 		return rd_kafka_msg_new(itopic,
@@ -1460,7 +1504,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 					key,
 					keylen,
 					msg_opaque);
-	}
+  }
 }
 
 /**
@@ -1654,15 +1698,15 @@ rd_kafka_resp_err_t streams_rd_kafka_seek_wrapper (rd_kafka_itopic_t *rkt,
   retVal = streams_topic_partition_create (rkt->rkt_topic->str,
                                               partition, &tp);
   if(retVal)
-     return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+     return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
   rd_kafka_q_purge (&(rkt->rkt_rk->rk_cgrp->rkcg_q));
   retVal = streams_consumer_seek (rkt->rkt_rk->streams_consumer, tp, offset);
 
-  if(!retVal)
-      return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
-  else
-      return RD_KAFKA_RESP_ERR_NO_ERROR;
+  if(retVal)
+      return streams_to_librdkafka_error_converter (retVal, RD_KAFKA_OP_SEEK);
+
+  return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                                    int32_t partition,
@@ -1671,7 +1715,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         if(rkt==NULL || rkt->rkt_topic == NULL ||
                             rkt->rkt_topic->str == NULL)
-              return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+              return RD_KAFKA_RESP_ERR__INVALID_ARG;
         shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
         rd_kafka_q_t *tmpq = NULL;
@@ -2081,8 +2125,14 @@ int streams_rd_kafka_committed_wrapper (rd_kafka_t *rk,
           streams_topic_partition_create(topic_name,
                                     (topics->elems[i]).partition, &tp);
           int64_t offset = 0;
-          streams_consumer_committed (rk->streams_consumer, tp, &offset);
-          (topics->elems[i]).offset = offset;
+          int err = streams_consumer_committed (rk->streams_consumer, tp, &offset);
+          if (!err) {
+            (topics->elems[i]).offset = offset;
+          } else {
+            (topics->elems[i]).err =
+              streams_to_librdkafka_error_converter (err, RD_KAFKA_OP_COMMITTED);
+          }
+
           streams_topic_partition_destroy(tp);
           streams_topic_count++;
           } else {
@@ -2123,11 +2173,11 @@ rd_kafka_committed (rd_kafka_t *rk,
 	if (is_streams_consumer(rk)) {
 		int retVal = streams_rd_kafka_committed_wrapper (rk, partitions);
 		if (retVal == -1)
-			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC; //TODO return detailed error codes
+			return RD_KAFKA_RESP_ERR__INVALID_ARG;
 		else if (retVal == 0)
 			return RD_KAFKA_RESP_ERR_NO_ERROR;
 		else
-			return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+			return RD_KAFKA_RESP_ERR__INVALID_ARG;
 	}
 
 	replyq = rd_kafka_q_new(rk);
@@ -2186,8 +2236,12 @@ streams_rd_kafka_position_wrapper (rd_kafka_t *rk,
       int32_t retVal = 0;
       retVal = streams_consumer_position (rk->streams_consumer,
                                              streams_tps[i], &offset);
-      if (!retVal )partitions->elems[i].offset = offset;
-      else err = RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+      if (!retVal ) {
+        partitions->elems[i].offset = offset;
+      } else {
+        partitions->elems[i].err =
+          streams_to_librdkafka_error_converter (retVal, RD_KAFKA_OP_POSITION);
+      }
     } else {
       kafka_topic_count++;
     }
@@ -2196,7 +2250,7 @@ streams_rd_kafka_position_wrapper (rd_kafka_t *rk,
         streams_topic_partition_free (streams_tps, streams_topic_count);
         rd_kafka_topic_partition_list_reset_offsets(partitions,
                 RD_KAFKA_OFFSET_INVALID);
-        return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
     }
   }
   return err;
@@ -3028,6 +3082,7 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
 err:
         state->err = err;
 }
+
 
 rd_kafka_resp_err_t
 rd_kafka_list_groups (rd_kafka_t *rk, const char *group,

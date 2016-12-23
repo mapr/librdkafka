@@ -48,7 +48,6 @@ int ProducerTest::runProduceTest (const char *topicName,
                                    const char *value,
                                    int msgFlag,
                                    int pid) {
-  static char *brokers = "localhost:9092";
   rd_kafka_t *producer;
   rd_kafka_conf_t *conf;
   if(isConfValid)
@@ -69,7 +68,7 @@ int ProducerTest::runProduceTest (const char *topicName,
       return PRODUCER_CREATE_FAILED;
     }
 
-    rd_kafka_brokers_add(producer, brokers);
+    rd_kafka_brokers_add(producer, KAFKA_BROKERS);
     topic = rd_kafka_topic_new (producer, topicName, topicConf);
 
     int keylen = key?strlen(key):0;
@@ -157,7 +156,7 @@ int ProducerTest::runProducerErrorTest(char * strName, int numMsgs,
       return PRODUCER_CREATE_FAILED;
     }
     char topicName[100];
-    sprintf(topicName, "%s0:topic", strName);
+    snprintf(topicName, sizeof(topicName), "%s0:topic", strName);
     topic = rd_kafka_topic_new (producer, topicName, topicConf);
     int err = 0;
     char value[30];
@@ -169,7 +168,7 @@ int ProducerTest::runProducerErrorTest(char * strName, int numMsgs,
         //else
           //TODO:Delete streams topic instead of rd_kafka_topic_destroy(topic);
       }
-      sprintf(value, "value:%d", nmsgs);
+      snprintf(value, sizeof(value), "value:%d", nmsgs);
       err = rd_kafka_produce (topic,
                                 0,
                                 msgFlag,(void *) value,
@@ -202,7 +201,7 @@ int ProducerTest::runProducerMixedTopicTest(char * strName, int type, int flag){
   rd_kafka_topic_conf_t *topicConf = rd_kafka_topic_conf_new();
   //create Mapr topic
   char maprTopicName[100];
-  sprintf(maprTopicName, "%s0:maprtopic",  strName);
+  snprintf(maprTopicName, sizeof(maprTopicName), "%s0:maprtopic",  strName);
   rd_kafka_topic_t *maprTopicObj = rd_kafka_topic_new (producer, maprTopicName,
                                             rd_kafka_topic_conf_dup(topicConf));
   //create kafka topic
@@ -270,7 +269,7 @@ int ProducerTest::runProducerBatchTest (const char *strName,
   int ret = -1;
   conf = rd_kafka_conf_new();
   char streamTopic[200];
-  sprintf(streamTopic, "%s0:%s", strName, topicName);
+  snprintf(streamTopic, sizeof(streamTopic), "%s0:%s", strName, topicName);
   rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
   rkt = rd_kafka_topic_new(rk, streamTopic, rd_kafka_topic_conf_new());
 
@@ -281,7 +280,7 @@ int ProducerTest::runProducerBatchTest (const char *strName,
       int batch_cnt = totalMsgs / numPart;
 
       for (i = 0 ; i < batch_cnt ; i++) {
-        sprintf(msg, "Value:%s:%d:%d", streamTopic, partition, i);
+        snprintf(msg, sizeof(msg), "Value:%s:%d:%d", streamTopic, partition, i);
         rkmessages[i].payload   = strdup(msg);
         rkmessages[i].len       = strlen(msg);
       }
@@ -301,7 +300,7 @@ int ProducerTest::runProducerBatchTest (const char *strName,
   } else {
     rkmessages = (rd_kafka_message_t*) calloc(sizeof(*rkmessages), totalMsgs);
     for (i = 0 ; i < totalMsgs ; i++) {
-        sprintf(msg, "Value:%s:%d", streamTopic, i);
+        snprintf(msg,  sizeof(msg), "Value:%s:%d", streamTopic, i);
         rkmessages[i].payload   = strdup(msg);
         rkmessages[i].len       = strlen(msg);
       }
@@ -362,7 +361,7 @@ int ProducerTest::runProduceOutqLenTest (const char *stream, int numStreams,
      for (int i = 0; i <  numTopics; ++i) {
       char currentName[100];
       int tempIndex = s * numTopics +i;
-      sprintf(currentName, "%s%d:topic%d",  stream, s, i);
+      snprintf(currentName,  sizeof(currentName), "%s%d:topic%d",  stream, s, i);
       topicArr[tempIndex] = rd_kafka_topic_new( producer, currentName,
                                         rd_kafka_topic_conf_dup(topicConf));
       }
@@ -377,11 +376,11 @@ int ProducerTest::runProduceOutqLenTest (const char *stream, int numStreams,
             char sendvalue[200];
 
             memset (sendkey, '\0', 200);
-            sprintf(sendkey, "Key:%s%d:topic%d:%d:%d:%d:%d",stream,
+            snprintf(sendkey, sizeof(sendkey), "Key:%s%d:topic%d:%d:%d:%d:%d",stream,
                                             sIdx, tIdx,sIdx, tIdx, pIdx, mIdx);
             size_t keySize = (size_t)strlen(sendkey);
             memset(sendvalue, 'a' , 200);
-            sprintf(sendvalue, "Value:%s%d:%d:%d:%d",stream,
+            snprintf(sendvalue, sizeof(sendvalue),"Value:%s%d:%d:%d:%d",stream,
                                             sIdx, tIdx, pIdx, mIdx);
             size_t valSize = 200;
 
@@ -454,7 +453,7 @@ int ProducerTest::runPartitionerTest (const char *stream, int numParts,
     }
   }
   char currentName[100];
-  sprintf(currentName, "%s0:topic",  stream);
+  snprintf(currentName, sizeof(currentName), "%s0:topic",  stream);
   rd_kafka_topic_t *topicObj = rd_kafka_topic_new( producer, currentName, topicConf);
   bool nullKey = false;
   int err = 0;
@@ -468,11 +467,11 @@ int ProducerTest::runPartitionerTest (const char *stream, int numParts,
                 break;
         case 1: //Same Key
                 memset (sendkey, 0 , 200);
-                sprintf(sendkey, "Key:%s0:topic", stream);
+                snprintf(sendkey, sizeof(sendkey), "Key:%s0:topic", stream);
                 break;
         case 2: //Diff Key
                 memset (sendkey, 0 , 200);
-                sprintf(sendkey, "Key:%s0:topic:%d", stream, mIdx);
+                snprintf(sendkey, sizeof(sendkey), "Key:%s0:topic:%d", stream, mIdx);
                 break;
         default:nullKey = true;
                 break;
@@ -481,7 +480,7 @@ int ProducerTest::runPartitionerTest (const char *stream, int numParts,
       keySize = (size_t)strlen(sendkey);
 
     memset(sendvalue, 0 , 200);
-    sprintf(sendvalue, "Value:%s0",stream);
+    snprintf(sendvalue, sizeof(sendvalue), "Value:%s0",stream);
     size_t valSize = strlen (sendvalue);
 
       if (!nullKey)

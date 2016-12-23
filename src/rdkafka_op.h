@@ -66,6 +66,10 @@ typedef enum {
         RD_KAFKA_OP_FETCH_START, /* Application -> toppar's Broker thread */
         RD_KAFKA_OP_FETCH_STOP,  /* Application -> toppar's Broker thread */
         RD_KAFKA_OP_SEEK,        /* Application -> toppar's Broker thread */
+        RD_KAFKA_OP_POSITION,    /* Added to indicate op type during
+                                    mapr streams to librdkafka error conversion */
+        RD_KAFKA_OP_COMMITTED,    /* Added to indicate op type during
+                                    mapr streams to librdkafka error conversion */
         RD_KAFKA_OP_OFFSET_FETCH, /* Broker -> broker thread: fetch offsets
                                    * for topic. */
 

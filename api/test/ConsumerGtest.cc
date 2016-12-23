@@ -77,13 +77,14 @@ void consumer_poll_test_case (char *path, int nstreams, int ntopics,int nparts,
                               bool roundRb, int nslowtopics, bool print,
                               uint64_t timeout, const char* groupid, bool topicSub,
                               bool autoCommit, bool verify) {
-  int expectedMsgs =  nstreams * nparts *
+  uint64_t expectedMsgs =  nstreams * nparts *
                   (ntopics * nmsgs + nslowtopics * nmsgs /1000);
   ASSERT_EQ (0, stream_create (path, nstreams , nparts));
-  EXPECT_EQ (expectedMsgs, ConsumerTest::runPollTest (path, nstreams, ntopics,
+  uint64_t actualMsg = ConsumerTest::runPollTest (path, nstreams, ntopics,
                                             nparts, nmsgs, msgsize,flag,
                                             roundRb, nslowtopics, print, timeout,
-                                            groupid, topicSub, autoCommit, verify ));
+                                            groupid, topicSub, autoCommit, verify );
+  EXPECT_EQ (expectedMsgs, actualMsg);
   ASSERT_EQ (0, stream_delete (path, nstreams));
 }
 
@@ -95,9 +96,7 @@ void consumer_offset_commit_test_case (char *strName, const char *groupid,
   int out = ConsumerTest::runCommitTest (strName, groupid , consumerInvalid,
                                         topicInvalid, offsetInvalid);
   int err = 0;
-  if(topicInvalid)
-    err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
-  else if(consumerInvalid)
+  if(topicInvalid || consumerInvalid)
     err = RD_KAFKA_RESP_ERR__INVALID_ARG;
   else
     err = streams_committed_offset_check(strName);
@@ -112,7 +111,7 @@ void regex_test (char *str1, char *str2, int type, bool isBlackList) {
   switch (type) {
     case 0: break;
 
-    case 1: err_expected =  RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+    case 1: err_expected =  RD_KAFKA_RESP_ERR__INVALID_ARG;
             break;
 
     case 2: err_expected =  RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -187,13 +186,13 @@ TEST_F(SubscribeTest, maprConsumerMaprTopicSubscribeTest) {
                                                      false, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerKafkaTopicSubscribeTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      1, 1, "ConsumerTest",
                                                      false, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerMixedTopicSubscribeTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      1, 2, "ConsumerTest",
                                                      false, NULL));
@@ -204,13 +203,13 @@ TEST_F(SubscribeTest, kafkaConsumerKafkaTopicSubscribeTest) {
                                                      false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMaprTopicSubscribeTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      2, 0, "ConsumerTest",
                                                      false, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMixedTopicSubscribeTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                                      2, 2, "ConsumerTest",
                                                      false, NULL));
@@ -255,21 +254,21 @@ TEST_F(SubscribeTest, kafkaConsumerInvalidGroupAssignTest) {
                                       true, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerMaprTopicAssignTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
                                                      1, 0, "ConsumerTest", true, NULL));
 }
 TEST_F(SubscribeTest, DISABLED_maprConsumerKafkaTopicAssignTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                       2, 1, "ConsumerTest", true, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMaprTopicAssignTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                       2, 0, "ConsumerTest", true, NULL));
 }
 TEST_F(SubscribeTest, kafkaConsumerMixedTopicAssignTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC,
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG,
       ConsumerTest::runSubscribeTest (strName,2, 2, 4, true,
                                       2, 2, "ConsumerTest", true, NULL));
 }
@@ -306,7 +305,7 @@ TEST(ConsumerTest, consumerPollVerifyOrderTest) {
                            "consumerPollVerifyOrderTestGr", true, true, false );
 }
 TEST(ConsumerTest, consumerPollVerifyOrderCommitTest) {
-  consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200,
+  consumer_poll_test_case (STREAM_POLL, 1, 1, 1, 10000, 200,
                            RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
                            "consumerPollVerifyOrderTestGr", true, false, false );
 }
@@ -316,12 +315,12 @@ TEST(ConsumerTest, consumerPollVerifyOrderMsgFreeTest) {
                            "consumerPollVerifyOrderMsgFreeTestGr", true, true, true );
 }
 TEST(ConsumerTest, consumerSubscribeCommitTest) {
-  consumer_poll_test_case (STREAM_POLL,1, 4, 2, 1000, 200,
+  consumer_poll_test_case (STREAM_POLL,1, 1, 1, 1000, 200,
                            RD_KAFKA_MSG_F_COPY, true, 0, true, 30,
                            "consumerSubscribeGr", true, false, true );
 }
 TEST(ConsumerTest, consumerAssignCommitTest) {
-  consumer_poll_test_case (STREAM_POLL,1, 4, 2, 10, 200,
+  consumer_poll_test_case (STREAM_POLL,1, 1, 1, 10, 200,
                            RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
                            "consumerAssignGr", false, false, true );
 }

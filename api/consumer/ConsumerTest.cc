@@ -50,18 +50,22 @@ void populateTopicPartitionList (char *strName, int numStreams, int numTopics,
       memset ( currentName, '\0', 100);
       int tempIndex = s* numTopics + t;
       if (cDefaultStr) {
-        sprintf(currentName, "topic%d", t);
+        snprintf(currentName, sizeof(currentName), "topic%d", t);
       } else {
         switch (topicType)  {
-        case 0: sprintf(currentName, "%s%d:topic%d",  strName, s, t);
+        case 0: snprintf(currentName, sizeof(currentName),
+                    "%s%d:topic%d",  strName, s, t);
                 break;
-        case 1: sprintf(currentName, "%s%dtopic%d",  strName, s, t);
+        case 1: snprintf(currentName, sizeof(currentName),
+                    "%s%dtopic%d",  strName, s, t);
                 break;
-        case 2: //50-50 Mapr and Kafka topics`
+        case 2: //50-50 Mapr and Kafka topics
                 if( tempIndex % 2 == 0)
-                  sprintf(currentName, "%s%d:topic%d",  strName, s, t);
+                  snprintf(currentName, sizeof(currentName),
+                      "%s%d:topic%d",  strName, s, t);
                 else
-                  sprintf(currentName, "%s%dtopic%d",  strName, s, t);
+                  snprintf(currentName, sizeof(currentName),
+                      "%s%dtopic%d",  strName, s, t);
                 break;
         }
       }
@@ -71,15 +75,16 @@ void populateTopicPartitionList (char *strName, int numStreams, int numTopics,
           memset(temp, 0, 200);
           rd_kafka_topic_partition_list_add(*outList, currentName , p);
           if(cDefaultStr)
-            sprintf(temp, "%s0:%s:%d",cDefaultStr, currentName, p);
+            snprintf(temp, sizeof(temp),
+                "%s0:%s:%d",cDefaultStr, currentName, p);
           else
-            sprintf(temp, "%s:%d", currentName, p);
+            snprintf(temp, sizeof(temp), "%s:%d", currentName, p);
           if (subscrMap) (*subscrMap)[temp] = 1;
         }
       } else {
           if(cDefaultStr) {
             memset(temp, 0, 200);
-            sprintf(temp, "%s0:%s",cDefaultStr, currentName);
+            snprintf(temp, sizeof(temp), "%s0:%s",cDefaultStr, currentName);
             if (subscrMap) (*subscrMap)[temp] = 1;
           } else {
             if (subscrMap) (*subscrMap)[currentName] = 1;
@@ -100,7 +105,8 @@ bool verifySubscriptions (rd_kafka_topic_partition_list_t *inList,
     if (isAssign) {
       char temp[200];
       memset(temp, '\0', 200);
-      sprintf(temp, "%s:%d", inList->elems[i].topic, inList->elems[i].partition);
+      snprintf(temp, sizeof(temp), "%s:%d",
+          inList->elems[i].topic, inList->elems[i].partition);
       if (subscrMap.count (temp) > 0)
           count ++;
     } else {
@@ -160,7 +166,7 @@ int ConsumerTest::runSubscribeTest (char *strName, int numStreams, int numTopics
     if (cDefaultStr) {
     char cStr[strlen(cDefaultStr) +1];
     memset (cStr, 0, strlen(cDefaultStr) +1);
-    sprintf (cStr, "%s0", cDefaultStr);
+    snprintf (cStr, sizeof(cStr), "%s0", cDefaultStr);
     rd_kafka_conf_set(conf, "streams.consumer.default.stream", cStr,
                       errstr, sizeof(errstr));
     }
@@ -385,7 +391,8 @@ void *createAndStartConsumer (void *thArg) {
   for (int t = 0; t < ntopics; ++t) {
     char currentName[100];
     memset ( currentName, '\0', 100);
-    sprintf(currentName, "%s0:topic%d",  strName, args->topicIds[t]);
+    snprintf(currentName, sizeof(currentName),
+        "%s0:topic%d",  strName, args->topicIds[t]);
     for(int p = minPartId; p < maxPartId ; ++p ) {
         rd_kafka_topic_partition_list_add(tp_list, currentName, p);
     }
@@ -513,7 +520,7 @@ int ConsumerTest::runCommitTest (char * strName, const char *groupid,
                                     rd_kafka_topic_partition_list_new(1);
   char topic[100];
   memset ( topic, '\0', 100);
-  sprintf( topic, "%s0:topic0",  strName);
+  snprintf( topic, sizeof(topic), "%s0:topic0",  strName);
   rd_kafka_topic_partition_list_add(tp_list, topic , 0);
   //subscribe to only one topic partition
   rd_kafka_subscribe (consumer, tp_list);
@@ -534,7 +541,7 @@ int ConsumerTest::runCommitTest (char * strName, const char *groupid,
     rd_kafka_topic_partition_list_t *offset_list =
                                    rd_kafka_topic_partition_list_new(1);
     if(topicInvalid)
-      sprintf( topic, "%s0topic0",  strName);
+      snprintf( topic, sizeof(topic), "%s0topic0", strName);
 
     rktpar = rd_kafka_topic_partition_list_add (offset_list, topic, 0);
     rktpar->offset = offset1+1;
@@ -683,7 +690,7 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid,
   //populate tp list for consumer
   for (int t = 0; t < ntopics; ++t) {
     memset ( currentName, '\0', 100);
-    sprintf(currentName, "%s0:topic%d",  strName, t);
+    snprintf(currentName, sizeof (currentName),"%s0:topic%d",  strName, t);
     rd_kafka_topic_partition_list_add(tp_list, currentName, RD_KAFKA_PARTITION_UA);
     rd_kafka_topic_partition_list_add(out_list, currentName, 0);
   }

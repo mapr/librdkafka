@@ -1014,18 +1014,18 @@ int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 		if (streams_topic_count!=0 && kafka_topic_count!=0) {
 			//Both streams and kafka topic names provided
 			*tcount = streams_topic_count;
-			return -1;
+			return MIX_TOPICS;
 		}
 	}
 
 	if (streams_topic_count > 0 ) {
-		return 0;
+		return STREAMS_TOPICS;
 	} else if(kafka_topic_count > 0 ) {
 		*tcount = streams_topic_count;
-		return 1;
+		return KAFKA_TOPICS;
 	} else {
 		*tcount = streams_topic_count;
-		return -1;
+		return MIX_TOPICS;
 	}
 }
 
@@ -1077,7 +1077,7 @@ int streams_get_regex_topic_names (rd_kafka_t *rk,
       //Both streams and kafka topic names provided
       *regex_count    = regex_topic_count;
       *streams_count  = streams_topic_count;
-      return -1;
+      return MIX_TOPICS;
     }
   }
   *streams_topics = temp_topics;
@@ -1085,11 +1085,11 @@ int streams_get_regex_topic_names (rd_kafka_t *rk,
   *regex_count    = regex_topic_count;
   *streams_count  = streams_topic_count;
   if (regex_topic_count > 0 || streams_topic_count > 0  ) {
-    return 0;
+    return STREAMS_TOPICS;
   } else if(kafka_topic_count > 0 ) {
-    return 1;
+    return KAFKA_TOPICS;
   } else {
-    return -1;
+    return MIX_TOPICS;
   }
 }
 
@@ -1128,17 +1128,18 @@ int streams_get_topic_commit_info (rd_kafka_t *rk,
 
 		if (streams_topic_count!=0 && kafka_topic_count!=0) {
 			*tp_size = (uint32_t) streams_topic_count;
-			return -1;
+			return MIX_TOPICS;
 		}
 	}
 
 	if (streams_topic_count > 0 ) {
 		*tp_size = (uint32_t) streams_topic_count;
-		return 0;
+		return STREAMS_TOPICS;
 	} else if (kafka_topic_count > 0 ) {
-		return 1;
+	  *tp_size = (uint32_t) streams_topic_count;
+    return KAFKA_TOPICS;
 	} else {
-                return -1;
+                return MIX_TOPICS;
         }
 }
 

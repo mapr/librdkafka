@@ -1896,6 +1896,7 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *c
 
   streams_config_set (*config, "enable.auto.commit",
                       conf.enable_auto_commit?"true":"false");
+  streams_config_set (*config, "streams.zerooffset.record.on.eof", "true");
 
   memset (t_ms_str, 0, sizeof(t_ms_str));
   snprintf(t_ms_str, sizeof (t_ms_str), "%d", conf.auto_commit_interval_ms);

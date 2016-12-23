@@ -220,13 +220,16 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         rd_kafka_resp_err_t all_err = 0;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
 
-  if(rkt==NULL || rkt->rkt_topic == NULL || rkt->rkt_topic->str == NULL)
-    return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+  if(rkt==NULL || rkt->rkt_topic == NULL || rkt->rkt_topic->str == NULL) {
+    rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+    return -1;
+  }
 
   if (streams_is_valid_topic_name(rkt->rkt_topic->str, NULL)) {
-    if(rkt->rkt_rk->kafka_producer)
-      return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
-
+    if(rkt->rkt_rk->kafka_producer) {
+      rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+      return -1;
+    }
     if (!is_streams_producer(rkt->rkt_rk))
       streams_producer_create_wrapper(rkt->rkt_rk);
 

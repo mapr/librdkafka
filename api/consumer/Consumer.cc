@@ -54,6 +54,8 @@ int verifyAndAddStats(rd_kafka_message_t *rkmessage, ConsumerPerfStats *stats,
                       bool checkOrder, int *prevIdArr) {
   if(!rkmessage)
     return -1;
+  if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
+    return -1;
 
   uint64_t numBytes = rkmessage->len + rkmessage->key_len;
   int msg_partition = rkmessage->partition;
@@ -183,7 +185,6 @@ uint64_t Consumer::run() {
 		for (int t = 0; t < numTopics; ++t) {
 		  char currentName[100];
 			memset ( currentName, '\0', 100);
-			int tempIndex = s* numTopics +t;
 			sprintf(currentName, "%s%d:topic%d",  streamName, s, t);
 			if (topicSubscription) {
 			   rd_kafka_topic_partition_list_add(tp_list, currentName,
@@ -211,16 +212,18 @@ uint64_t Consumer::run() {
   std::fill_n(prevMsgId, nTotalTp, -1);
   ConsumerPerfStats *stats = new ConsumerPerfStats();
   int msgCount = 0;
+  int ret = 0;
 	while (true) {
 		rd_kafka_message_t *rkmessage;
 		rkmessage = rd_kafka_consumer_poll(consumer, 1000);
 		if (rkmessage) {
-			msgCount++;
 			pollsWithMissingMsgs = 0;
-			verifyAndAddStats(rkmessage, stats, numTopics, numPartitions,
+			ret = verifyAndAddStats(rkmessage, stats, numTopics, numPartitions,
                         autoCommitEnabled, verifyKeys,
                         true/*checkOrder*/, prevMsgId);
-		} else {
+		  if (ret == 0)
+		    msgCount ++;
+    } else {
 			++pollsWithMissingMsgs;
 		}
 		if (pollsWithMissingMsgs >= allowedMissingPollCount ) {

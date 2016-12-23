@@ -298,46 +298,53 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
 		uint32_t key_len = 0;
 		uint32_t val_len = 0;
 
-		streams_msg_get_value (record,
+    streams_msg_get_offset (record,
+                  j,
+                  &(rkm->offset));
+    if (rkm->offset == 0) {
+      rkm->err = RD_KAFKA_RESP_ERR__PARTITION_EOF;
+      rko->rko_rkmessage = *rkm;
+      rko->rko_err = rkm->err;
+      rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+      rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
+    } else {
+      streams_msg_get_value (record,
 				       j,
 				       &(payload),
 				       &val_len);
-	  if (val_len < (uint32_t) rk->rk_conf.recv_max_msg_size) {
-      streams_msg_get_key (record,
+	    if (val_len < (uint32_t) rk->rk_conf.recv_max_msg_size) {
+        streams_msg_get_key (record,
 				       j,
 				       &(key),
 				       &key_len);
-		  streams_msg_get_offset (record,
-				          j,
-				          &(rkm->offset));
-		  streams_msg_get_timestamp (record,
+		    streams_msg_get_timestamp (record,
 					   j,
-					   &(rko->rko_timestamp));
+					     &(rko->rko_timestamp));
 
-  		rkm->len = val_len;
-  		rkm->key_len = key_len;
-  		rkm->key = rd_malloc(rkm->key_len +1);
-  		rkm->payload = rd_malloc(rkm->len +1);
-  		if (rkm->key_len >0) {
-	  		strncpy ((char*)rkm->key,(char *) key, rkm->key_len);
-		  	((char *)rkm->key)[rkm->key_len] = '\0';
-		  } else {
-			  rkm->key = key;
-		  }
-		  if (payload) {
-			  strncpy ((char *)rkm->payload,(char *) payload, rkm->len);
-			  ((char *)rkm->payload)[rkm->len] = '\0';
-			  rkm->rkt = rkt;
-			  rkm->partition = partitionId;
-			  rkm->is_streams_message = true;
-			  rko->rko_rkmessage = *rkm;
-			  rko->rko_err = rkm->err;
-			  rko->rko_rkt = rkm->rkt;
-			  rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
-			  rko->rko_version = ver;
-			  rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
-		  }
-    } else {
+		  rkm->len = val_len;
+		  rkm->key_len = key_len;
+		  rkm->key = rd_malloc(rkm->key_len +1);
+		  rkm->payload = rd_malloc(rkm->len +1);
+		  if (rkm->key_len >0) {
+			  strncpy ((char*)rkm->key,(char *) key, rkm->key_len);
+			  ((char *)rkm->key)[rkm->key_len] = '\0';
+		    } else {
+			    rkm->key = key;
+		    }
+		    if (payload) {
+			    strncpy ((char *)rkm->payload,(char *) payload, rkm->len);
+			    ((char *)rkm->payload)[rkm->len] = '\0';
+			    rkm->rkt = rkt;
+			    rkm->partition = partitionId;
+			    rkm->is_streams_message = true;
+			    rko->rko_rkmessage = *rkm;
+			    rko->rko_err = rkm->err;
+			    rko->rko_rkt = rkm->rkt;
+			    rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+			    rko->rko_version = ver;
+			    rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
+		    }
+      } else {
         //set error_cb
         char errstr[512];
         rd_snprintf(errstr, sizeof(errstr),
@@ -346,6 +353,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
                    val_len, rk->rk_conf.recv_max_msg_size);
 
         rd_kafka_op_err (rk, RD_KAFKA_RESP_ERR__BAD_MSG, "%s", errstr);
+      }
     }
   }
 }

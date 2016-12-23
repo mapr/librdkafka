@@ -53,9 +53,11 @@ void msg_produce_test_case (const char* strName, int partnId,
                              1/*Default Partitions*/));
     char topicName[100];
     if (isTopicValid)
-      sprintf(topicName, "%s0:topic", strName);
+      snprintf(topicName, sizeof (topicName),
+          "%s0:topic", strName);
     else
-      sprintf(topicName, "%s0topic", strName);
+      snprintf(topicName, sizeof (topicName),
+          "%s0topic", strName);
     ProducerTest::runProduceTest(topicName, isConfValid, key, value,
                                 msgflag, partnId);
     /*Verify # of messages produced using mapr streamanalyzer*/
@@ -86,8 +88,8 @@ void combination_test (char* strName, int numStr,
                                         numMsgsPerPartition, numProducers,
                                         msgSize, flag, roundRobin, slowTopics,
                                         printStats, timeout, &numCallbacks));
-    EXPECT_EQ (expectedCb, numCallbacks);
     EXPECT_EQ (expectedCb, stream_count_check(strName, numStr));
+    EXPECT_EQ (expectedCb, numCallbacks);
     EXPECT_EQ (SUCCESS, stream_delete(strName, numStr));
 }
 
@@ -106,8 +108,7 @@ void produce_mix_topic_test (char*strName, int type, int flag) {
 
     ASSERT_EQ(0, stream_create (strName, 1/*stream index*/,
                                  1/*Default Partitions*/));
-    EXPECT_EQ (RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
-        ProducerTest::runProducerMixedTopicTest(strName, type, flag));
+    EXPECT_EQ (-1, ProducerTest::runProducerMixedTopicTest(strName, type, flag));
     EXPECT_EQ(0, stream_delete (strName, 1/*stream index*/));
 }
 

@@ -16,7 +16,7 @@ int ConfigTest::runProducerConfigTest (char *str, char *topic,
   if (pDefaultStr) {
     char pStr[strlen(pDefaultStr) +1];
     memset (pStr, 0, strlen(pDefaultStr) +1);
-    sprintf (pStr, "%s0", pDefaultStr);
+    snprintf (pStr, sizeof(pStr), "%s0", pDefaultStr);
     rd_kafka_conf_set(conf, "streams.producer.default.stream", pStr,
                       errstr, sizeof(errstr));
   }
@@ -41,9 +41,9 @@ int ConfigTest::runProducerConfigTest (char *str, char *topic,
     char topicName[30];
     memset (topicName, 0, 30);
     if(str)
-      sprintf (topicName, "%s0:%s", str, topic);
+      snprintf (topicName, sizeof(topicName),"%s0:%s", str, topic);
     else
-      sprintf (topicName, "%s", topic);
+      snprintf (topicName, sizeof(topicName), "%s", topic);
 
     rd_kafka_topic_t *topic_t = rd_kafka_topic_new (producer, topicName, topicConf);
 
@@ -106,9 +106,9 @@ int ConfigTest::runConsumerRecvMaxMsgSizeConfigTest (char *str, char *topic,
   char topicName[30];
   memset (topicName, 0, 30);
   if(str)
-    sprintf (topicName, "%s0:%s", str, topic);
+    snprintf (topicName, sizeof(topicName), "%s0:%s", str, topic);
   else
-    sprintf (topicName, "%s", topic);
+    snprintf (topicName, sizeof(topicName), "%s", topic);
   rd_kafka_topic_t *topic_t = rd_kafka_topic_new (producer, topicName, topicConf);
   //Produce numMsgs messages.
   int produceMsgSize = msgSize;

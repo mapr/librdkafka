@@ -18,9 +18,9 @@ else
 endif
 
 
-SOURCES  = ConfigGtest.cc
+SOURCES  = ErrorCodeGtest.cc
 OBJECTS  = $(patsubst %.cc,%.o,$(SOURCES))
-EXECUTABLE= ConfigGtest$(EXE)
+EXECUTABLE= ErrorCodeGtest$(EXE)
 
 CC=g++
 CFLAGS=-c -Wall -Wwrite-strings -std=c++0x -Wno-write-strings
