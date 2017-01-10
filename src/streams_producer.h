@@ -57,7 +57,7 @@ streams_producer_send(const streams_producer_t producer,
                       const streams_producer_cb cb,
                       void *cb_ctx);
 
-/** \brief Flush all outstanding records for this producer immediately.
+/** \brief Flush all outstanding records for this producer immediately..
   * \param producer [IN] : producer handle
   *
   * \return 0 on success. EINVAL on invalid inputs.
@@ -162,6 +162,14 @@ streams_producer_record_get_topic_partition(const streams_producer_record_t pr,
 STREAMS_API int32_t
 streams_producer_record_destroy(streams_producer_record_t pr);
 
+/** \brief Get the non zero count if messages are yet to be flushed to server.
+  * \param producer [IN] : Producer handle.
+  * \param count [OUT] : Number of send buffers yet to be flushed to server
+  * for topic.
+  */
+
+STREAMS_API int32_t
+streams_producer_send_buffer_get_size(const streams_producer_t p, int *count);
 
 #ifdef __cplusplus
 }  /* extern "C" */

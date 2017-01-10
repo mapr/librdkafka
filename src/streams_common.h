@@ -140,6 +140,10 @@ streams_config_create(streams_config_t *config);
   * default stream streams consumer will use when
   * streams_consumer_list_topics() is called with a null stream name.
   *
+  * "message.max.bytes": (default 1000000) max message size
+  * message allowed to be produced. This config is mainly added to support
+  * librdkafka config parameter 'message.max.bytes'.
+  *
   */
 STREAMS_API int32_t
 streams_config_set(const streams_config_t config,
