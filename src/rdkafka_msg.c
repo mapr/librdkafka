@@ -45,15 +45,13 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 	  if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
 		  rd_free(rkm->rkm_payload);
 
-	  if (rkm->rkm_key)
-		  rd_kafkap_bytes_destroy(rkm->rkm_key);
   } else {
 	  if (rkm->rkm_payload)
 		  rd_free(rkm->rkm_payload);
-
-	  if (rkm->rkm_key)
-		  rd_free(rkm->rkm_key);
   }
+  if (rkm->rkm_key)
+    rd_kafkap_bytes_destroy(rkm->rkm_key);
+
 	rd_free(rkm);
 }
 
@@ -102,11 +100,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	rkm->rkm_len        = len;
 	rkm->rkm_flags      = msgflags;
 	rkm->rkm_opaque     = msg_opaque;
-  if(!is_streams_producer(rkt->rkt_rk)) {
-     rkm->rkm_key        = rd_kafkap_bytes_new(key, (int32_t) keylen);
-  } else {
-    rkm->rkm_key          = key;
-  }
+	rkm->rkm_key        = rd_kafkap_bytes_new(key, (int32_t) keylen);
 	rkm->rkm_partition  = force_partition;
         rkm->rkm_offset     = 0;
 	rkm->rkm_timestamp  = utc_now / 1000;

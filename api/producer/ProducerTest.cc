@@ -330,7 +330,7 @@ void msg_delivered_cb_stub (rd_kafka_t *rk,
   bool *print = (bool *) opaque;
   if(*print) {
     cout << "\n Partition: "  << rkmessage->partition ;
-    cout << "\t Key: " << rkmessage->key;
+    cout << "\t Key: " << (char *)rkmessage->key;
     cout << "\t Payload: "  << (char *) rkmessage->payload ;
   }
 };
