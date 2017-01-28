@@ -38,6 +38,7 @@ char *STREAM_POLL = "/gtest-ConsumerPoll";
 char *STREAM_UNSUBSCRIBE = "/gtest-ConsumerUnsubscribe";
 char *STREAM_CLOSE = "/gtest-ConsumerClose";
 char *STREAM_COMBINATION = "/gtest-ConsumerCombination";
+char *STREAM_CONSUMER_GR_LIST = "/gtest-consumerGrListTest";
 
 class SubscribeTest: public testing::Test {
 
@@ -124,6 +125,104 @@ void regex_test (char *str1, char *str2, int type, bool isBlackList) {
   }
   EXPECT_EQ (err, err_expected);
 }
+
+void read_i32 (unsigned char **ptr, int32_t *out) {
+  memcpy (out, *ptr, sizeof(int32_t));
+  *out = be32toh(*out);
+  *ptr = *ptr + sizeof(int32_t);
+}
+void read_i16 (unsigned char **ptr, int16_t *out) {
+  memcpy (out, *ptr, sizeof(int32_t));
+  *out = be16toh(*out);
+  *ptr = *ptr + sizeof(int16_t);
+}
+
+void verify_list_group(const char *groupid, struct rd_kafka_group_list * glist) {
+  char *group1 = "MultiConGr";
+  char *group2 = "singleConGr";
+  char *clientid1 = "Consumer1";
+  char *clientid2 = "Consumer2";
+  char *clientid3 = "Consumer3";
+
+  if(glist) {
+    if (groupid)
+      ASSERT_EQ(1, glist->group_cnt);
+    for (int i =0; i < glist->group_cnt; i++) {
+      cout << "\n--------------------------------" ;
+      cout << "\nGroup: " << i;
+      struct rd_kafka_group_info gi = glist->groups[i];
+      cout << "\tName: " << gi.group;
+      cout << "\tProtocol: " << gi.protocol;
+      cout << "\tError: " << gi.err;
+      cout << "\n--------------------------------" ;
+      cout << "\n# of members: " << gi.member_cnt;
+      if (strcmp (gi.group, group1)== 0)
+        ASSERT_EQ(2, gi.member_cnt);
+      else if (strcmp (gi.group, group2)== 0)
+        ASSERT_EQ(1, gi.member_cnt);
+
+      for (int j = 0; j < gi.member_cnt; j++ ) {
+        struct rd_kafka_group_member_info mi = gi.members[j];
+        cout << "\n\nMember: " << j;
+        cout << "\nClient.id:" << mi.client_id;
+
+        unsigned char *m_ass =(unsigned char *) mi.member_assignment;
+        int16_t version = -1;
+        int32_t tcount = 0;
+        if (!m_ass)
+          continue;
+        read_i16( &m_ass, &version);
+        cout << "\nVersion:" << version ;
+        read_i32(&m_ass, &tcount);
+        cout << "\n# of topics:" << tcount;
+
+        if ((strcmp (gi.group, group1)== 0) &&
+              (strcmp (mi.client_id, clientid1)==0))
+          ASSERT_EQ(2, tcount);
+        else if ((strcmp (gi.group, group1)== 0) &&
+              (strcmp (mi.client_id, clientid2)==0))
+          ASSERT_EQ(1, tcount);
+        else if ((strcmp (gi.group, group2)== 0) &&
+              (strcmp (mi.client_id, clientid3)==0))
+          ASSERT_EQ(1, tcount);
+
+        for (int32_t t = 0; t < tcount; t++) {
+          int16_t str_len = 0;
+
+          read_i16( &m_ass, &str_len);
+          char str[str_len +1];
+          memcpy (str, m_ass, str_len);
+          str[str_len] = '\0';
+          m_ass += str_len;
+          cout << "\n" << t << ":Topic: " << str;
+          int32_t partArrCnt = 0;
+          read_i32 (&m_ass, &partArrCnt);
+          cout << "\nPids:";
+          for (int p = 0 ; p < partArrCnt ; p++) {
+            int32_t part;
+            read_i32 (&m_ass , &part);
+            cout << "" << part << ",";
+          }
+        }
+      } //end member_cnt for
+    } // end group_cnt for
+  } // end of if
+
+  rd_kafka_group_list_destroy(glist);
+}
+
+void consumer_gr_list_test_case (char *strName, const char *groupid){
+  ASSERT_EQ(0, stream_create(strName, 1, 4));
+  sleep (1);
+  struct rd_kafka_group_list * glist;
+  EXPECT_EQ(RD_KAFKA_RESP_ERR_NO_ERROR,
+          ConsumerTest::runConsumerListTest (strName, groupid,
+                            (const struct rd_kafka_group_list **) &glist));
+
+  verify_list_group(groupid, glist);
+  ASSERT_EQ(0, stream_delete(strName, 1));
+}
+
 /*-----------------------------------------------*/
 /*Consumer Create Tests*/
 /*-----------------------------------------------*/
@@ -413,6 +512,17 @@ TEST_F(RegexTest, consumerRegexDiffStreamSubscribeTest) {
 }
 TEST_F(RegexTest, consumerStreamOnlySubscribeTest) {
   regex_test (strName1, strName2, 3, true);
+}
+
+/*-----------------------------------------------*/
+/*Consumer gr list test*/
+/*-----------------------------------------------*/
+TEST (ConsumerTest, getAllConsumerGroupListTest) {
+  consumer_gr_list_test_case (STREAM_CONSUMER_GR_LIST, NULL);
+}
+
+TEST (ConsumerTest, getConsumerGroupInfoTest) {
+  consumer_gr_list_test_case (STREAM_CONSUMER_GR_LIST, "singleConGr");
 }
 
 int main (int argc, char **argv) {

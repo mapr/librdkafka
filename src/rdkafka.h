@@ -2308,6 +2308,9 @@ struct rd_kafka_group_info {
 struct rd_kafka_group_list {
         struct rd_kafka_group_info *groups;   /**< Groups */
         int    group_cnt;                     /**< Group count */
+        bool   is_streams_list;               /* List contains consumer gr
+                                               * on mapr streams
+                                               */
 };
 
 

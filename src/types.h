@@ -28,6 +28,8 @@ typedef void *streams_consumer_record_t;
 typedef void *streams_producer_t;
 typedef void *streams_producer_record_t;
 
+typedef void *streams_assign_list_t;
+
 
 typedef void (*streams_rebalance_cb) (
   streams_topic_partition_t *topic_partitions,

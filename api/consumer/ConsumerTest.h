@@ -31,6 +31,9 @@ class ConsumerTest {
                                             bool print);
     static rd_kafka_resp_err_t runRegexTest(char *str1, char *str2, int type,
                                             bool isBlackList);
+    static rd_kafka_resp_err_t runConsumerListTest (char *strName,
+                                   const char *groupid,
+                                   const struct rd_kafka_group_list ** glist);
 };
 
 struct RebalanceCbCtx {

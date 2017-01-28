@@ -358,12 +358,14 @@ streams_consumer_position(const streams_consumer_t consumer,
   * \param consumer [IN] : consumer handle
   * \param topic_name [IN] : topic name
   * \param num_partitions [OUT] : number of partitions for the topic
+  *
   * \return 0 on success. Error code on failure.
   *
   * Returns the number of partitions for the topic.  This function may
   * make a rpc to the server to fetch the topic metadata, unless the
   * client already has it cached.
   */
+
 STREAMS_API int32_t
 streams_consumer_get_num_partitions(const streams_consumer_t consumer,
                                     const char *topic_name,
@@ -377,6 +379,7 @@ streams_consumer_get_num_partitions(const streams_consumer_t consumer,
   *                               topic in the stream
   * \param num_topics [OUT] : size of the two arrays, topic_names and
   *                           num_partitions
+  *
   * \return 0 on success. Error code on failure.
   *
   * Returns an array of topics for the provided stream.  If
@@ -385,6 +388,7 @@ streams_consumer_get_num_partitions(const streams_consumer_t consumer,
   * stream is not set in the configuration, returns an error.  The
   * caller is responsible for freeing the arrays returned.
   */
+
 STREAMS_API int32_t
 streams_consumer_list_topics(const streams_consumer_t consumer,
                              const char *stream_name,
@@ -545,6 +549,133 @@ STREAMS_API int32_t
 streams_msg_get_timestamp(const streams_consumer_record_t cr,
                           uint32_t msg_index,
                           int64_t *timestamp);
+
+/** \brief Get Consumer groups
+  * \param consumer [IN] : consumer handle
+  * \param group_name [IN] : group name whose info to be returned
+  *                          NULL for all the groups)
+  * \param timeout_ms [IN] : timeout in milliseconds. Must be > 0
+  * \param num_groups [OUT] : number of groups
+  * \param assignmentSize [OUT] : assignment per group per stream per topic
+  * \param assignVector [OUT] : vector <AssignInfo *>
+  * \return 0 on success. Error code on failure.
+  *
+  */
+STREAMS_API int32_t
+streams_consumer_list_groups(const streams_consumer_t consumer,
+                             const char *stream_name,
+                             const char *group_name,
+                             int timeout_ms,
+                             uint32_t *num_groups,
+                             uint32_t *assignmentSize,
+                             streams_assign_list_t *assignVector);
+
+/** \brief Get Stream name from AssignInfo
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \param stream [OUT] : stream
+  * \param stream_size [OUT] : stream len
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_get_stream(streams_assign_list_t assignInfoVec, int index,
+                               const char **stream,
+                               uint32_t* stream_size);
+
+/** \brief Get topic name from AssignInfo
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \param topic [OUT] : stream
+  * \param topic_size [OUT] : topic len
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+  streams_assign_info_get_topic ( streams_assign_list_t assignInfoVec, int index,
+                               const char **topic,
+                               uint32_t* topic_size);
+
+/** \brief Get group name from AssignInfo
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \param group [OUT] : group name
+  * \param group_size [OUT] : group len
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_get_groupid(streams_assign_list_t assignInfoVec, int index,
+                               const char **group,
+                               uint32_t* group_size);
+
+/** \brief Get error per group per topic from AssignInfo
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \param err [OUT] : Error per topic per group
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_get_error(streams_assign_list_t assignInfoVec, int index,
+                                      int *error);
+
+/** \brief Get #of consumers per group per topic from AssignInfo
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \param num_consumers [OUT] : #of consumers per topic per group
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_get_num_consumers(streams_assign_list_t assignInfoVec, int index,
+                                      int *num_consumers);
+
+/** \brief Get consumers from AssignInfo
+  * \param group [OUT] : group name
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \parat consumers [OUT] : array of consumers names
+  * \param num_consumers [OUT] : size of 'consumers'
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_list_consumers(streams_assign_list_t assignInfoVec, int index,
+                                   char ***consumers,
+                                   int *num_consumers);
+
+/** \brief Get assignments for all consumers in AssignInfo
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \param assignments [OUT] : partition assignments array
+  * \param param size [OUT] : 'assignments' size
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_get_assignment(streams_assign_list_t assignInfoVec, int index,
+                                   int consumerId,
+                                   int **assignments,
+                                   int *size);
+
+/** \brief delete from AssignVector
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_destroy_all(streams_assign_list_t assignInfoVec);
+
+/** \brief Delete AssignInfo from assignInfoVec
+  * \param assignInfoVec [IN] : assignVector returned from
+  *                      streams_consumer_list_groups api
+  * \param index [IN] : index
+  * \return 0 on success. -1 on failure.
+  */
+STREAMS_API int32_t
+streams_assign_info_destroy(streams_assign_list_t assignInfoVec, int index);
+
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif

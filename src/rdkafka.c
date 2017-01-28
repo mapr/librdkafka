@@ -1237,7 +1237,7 @@ int streams_to_librdkafka_error_converter (int err, rd_kafka_op_type_t op_type) 
             if ((int)op_type == RD_KAFKA_OP_POSITION)
               return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
     case EIO: //Streams EIO
-            break;
+              return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
     case E2BIG: //Streams E2BIG
             return EMSGSIZE;
     case EINVAL: //Streams EINVAL
@@ -1246,7 +1246,7 @@ int streams_to_librdkafka_error_converter (int err, rd_kafka_op_type_t op_type) 
             else
               return RD_KAFKA_RESP_ERR__INVALID_ARG;
     default:
-            break;
+              return err;
   }
   return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -3088,6 +3088,21 @@ rd_kafka_resp_err_t
 rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                       const struct rd_kafka_group_list **grplistp,
                       int timeout_ms) {
+
+        struct rd_kafka_group_list *g_list;
+        if (is_streams_consumer (rk)) {
+            rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+            if (rk->rk_conf.streams_consumer_default_stream_name) {
+                err = streams_get_list_groups (rk, group,
+                                            &g_list, timeout_ms);
+                g_list->is_streams_list = true;
+                *grplistp = g_list;
+            } else {
+                err = RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+            }
+            return err;
+        }
+
         rd_kafka_broker_t *rkb;
         int rkb_cnt = 0;
         struct list_groups_state state = RD_ZERO_INIT;
@@ -3163,29 +3178,32 @@ void rd_kafka_group_list_destroy (const struct rd_kafka_group_list *grplist0) {
                 struct rd_kafka_group_info *gi;
                 gi = &grplist->groups[grplist->group_cnt];
 
-                if (gi->broker.host)
-                        rd_free(gi->broker.host);
+                if (!grplist->is_streams_list) {
+                  if (gi->broker.host)
+                    rd_free(gi->broker.host);
+                  if (gi->state)
+                    rd_free(gi->state);
+                  if (gi->protocol_type)
+                    rd_free(gi->protocol_type);
+                }
                 if (gi->group)
                         rd_free(gi->group);
-                if (gi->state)
-                        rd_free(gi->state);
-                if (gi->protocol_type)
-                        rd_free(gi->protocol_type);
                 if (gi->protocol)
                         rd_free(gi->protocol);
-
                 while (gi->member_cnt-- > 0) {
                         struct rd_kafka_group_member_info *mi;
                         mi = &gi->members[gi->member_cnt];
 
-                        if (mi->member_id)
-                                rd_free(mi->member_id);
+                        if (!grplist->is_streams_list) {
+                          if (mi->member_id)
+                            rd_free(mi->member_id);
+                          if (mi->client_host)
+                            rd_free(mi->client_host);
+                          if (mi->member_metadata)
+                            rd_free(mi->member_metadata);
+                        }
                         if (mi->client_id)
                                 rd_free(mi->client_id);
-                        if (mi->client_host)
-                                rd_free(mi->client_host);
-                        if (mi->member_metadata)
-                                rd_free(mi->member_metadata);
                         if (mi->member_assignment)
                                 rd_free(mi->member_assignment);
                 }
@@ -3246,3 +3264,322 @@ void rd_shared_ptrs_dump (void) {
         printf("#########################################################\n");
 }
 #endif
+
+void write_i32 (unsigned char *arr, int32_t in) {
+  in = htobe32(in);
+  memcpy (arr, &in,  sizeof(int32_t));
+}
+
+void write_i16 (unsigned char *arr, int32_t in) {
+  in = htobe16(in);
+  memcpy (arr, &in, sizeof(int16_t));
+}
+
+void write_str (unsigned char *arr, char *str, int str_len) {
+  memcpy (arr, str, str_len);
+}
+
+void write_i32_arr (unsigned char *arr, int *intArr, int a_len ) {
+  int i = 0;
+  for (i = 0; i <a_len; i++)
+    write_i32 (arr + (i *sizeof (int32_t)) , intArr[i]);
+}
+
+void read_i32 (unsigned char *arr, int32_t *out) {
+  memcpy (out, arr, sizeof(int32_t));
+  *out = be32toh(*out);
+}
+
+void read_i16 (unsigned char *arr, int32_t *out) {
+  memcpy (out, arr, sizeof(int16_t));
+  *out = be16toh(*out);
+}
+
+/* Member assignment format as per:
+https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
+  Schema:
+  MemberAssignment => Version PartitionAssignment
+    Version => int16
+    PartitionAssignment => [Topic [Partition]]
+      Topic => string
+      Partition => int32
+    UserData => bytes
+*/
+rd_kafka_resp_err_t
+streams_update_member_assignments (struct rd_kafka_group_member_info *mi,
+                                   int *assignments, int a_size, bool cExists,
+                                    char *full_str, int str_len) {
+  if(!assignments)
+    return EIO;
+
+  int old_assignment_size = mi->member_assignment_size;
+  unsigned char * members = NULL;
+  int fixed_size =  sizeof(int16_t) + //version, int16_t
+                    sizeof(int32_t) + //array size of topics, int32_t
+                    sizeof(int32_t); //user data
+
+  int var_size =  sizeof(int16_t) + //int16_t string len
+                  str_len +// actual string in bytes
+                  sizeof(int32_t)+ //array size of partitions, int32_t
+                  (a_size * sizeof(int32_t));
+
+  int tCntIndex = sizeof (int16_t);
+  int new_alloc = 0;
+  if (cExists) {
+    new_alloc = mi->member_assignment_size + var_size;
+    members = (unsigned char *) rd_realloc (mi->member_assignment,
+                                new_alloc * sizeof (unsigned char *));
+    if (!members)
+      return ENOMEM;
+
+    /*get original tcount*/
+    int32_t old_t_count = 0;
+    read_i32(members + tCntIndex, &old_t_count);
+    write_i32(members + tCntIndex, old_t_count +1 );
+    /*Next_topic_index is the place where new topic info is to be inserted */
+    int next_topic_index = old_assignment_size - sizeof(int32_t);
+    /*Insert new topic str*/
+    write_i16(members + next_topic_index, str_len);
+    write_str(members + next_topic_index + sizeof(int16_t),
+              full_str, str_len);
+    /*write partition array count*/
+    write_i32(members + next_topic_index + sizeof(int16_t) + str_len, a_size);
+    /*write partition array*/
+    int p_index = next_topic_index + sizeof(int16_t) + str_len + sizeof (int32_t);
+    write_i32_arr(members + p_index, assignments, a_size);
+    write_i32 (members + p_index + (a_size * sizeof(int32_t)), -1/*User data*/);
+    mi->member_assignment = members;
+    mi->member_assignment_size = new_alloc;
+  } else {
+    new_alloc =  fixed_size + var_size;
+    members = (unsigned char *) rd_malloc( new_alloc * sizeof (unsigned char *));
+    if (!members)
+      return ENOMEM;
+    memset (members , 0, new_alloc);
+    /*Leave version to 0 and skip 2 bytes*/
+    /*get original tcount*/
+    int t_count = 1;
+    write_i32(members + tCntIndex, t_count);
+    /*Next_topic_index is the place where new topic info is to be inserted */
+    /*Insert new topic str*/
+    int topic_index = tCntIndex + sizeof(int32_t);
+    write_i16(members + topic_index, str_len);
+    write_str(members + topic_index + sizeof(int16_t),
+              full_str, str_len);
+    /*write partition array count*/
+    int p_index = topic_index + sizeof(int16_t) + str_len;
+    write_i32(members + p_index, a_size);
+    /*write partition array*/
+    write_i32_arr(members + p_index + sizeof(int32_t), assignments, a_size);
+    /*user data*/
+    int32_t userdata = -1;
+    write_i32 (members + p_index + sizeof (int32_t) + (a_size * sizeof(int32_t)),
+               userdata);
+    mi->member_assignment = members;
+    mi->member_assignment_size = new_alloc;
+  }
+  return 0;
+}
+
+rd_kafka_resp_err_t
+streams_populate_group_member_info (struct rd_kafka_group_member_info *mi,
+                                    char *consumer, int *assignments,
+                                    int a_size, bool cExists,
+                                    char *str, int str_size,
+                                    char *topic, int t_size) {
+ /* Update topic*/
+  int16_t str_len = str_size + t_size + 1;
+  char streams_topic[str_len];
+  strncpy (streams_topic, str, str_size);
+  strncpy (streams_topic+str_size, ":", 1 );
+  strncpy (streams_topic+str_size+1, topic, t_size);
+  if(!cExists) {
+    memset(mi, 0, sizeof(mi));
+    mi->client_id = rd_strndup(consumer, strlen (consumer));
+  }
+
+  return streams_update_member_assignments(mi, assignments, a_size, cExists,
+                                      streams_topic, str_len);
+}
+
+int streams_is_group_present (struct rd_kafka_group_list *list, int curr_count,
+                         char *group, uint32_t *index) {
+  if (!group)
+    return -1;
+
+  int i = 0;
+  bool grFound = false;
+  while (i < curr_count){
+    if (strcmp(list->groups[i].group, group)==0) {
+      *index = i;
+      grFound = true;
+      break;
+    }
+    i++;
+  }
+  if(!grFound)
+    *index = -1;
+
+  return 0;
+}
+
+int
+streams_is_consumer_part_of_group (struct rd_kafka_group_info *groupInfo,
+                             char *consumer,
+                             int *index) {
+  if (!consumer)
+    return -1;
+
+  int i = 0;
+  bool cFound = false;
+  while (i < groupInfo->member_cnt){
+    struct rd_kafka_group_member_info *mi;
+    mi = &groupInfo->members[i];
+    if (strcmp(mi->client_id, consumer)==0) {
+      *index = i;
+      cFound = true;
+      break;
+    }
+    i++;
+  }
+  if(!cFound)
+    *index = -1;
+
+  return 0;
+}
+
+rd_kafka_resp_err_t
+streams_get_list_groups (rd_kafka_t *rk, char *group,
+                        const struct rd_kafka_group_list **grplistp,
+                        int timeout_ms) {
+  uint32_t num_groups = 0;
+  uint32_t assignment_size = 0;
+  streams_assign_list_t assignVector;
+  streams_consumer_list_groups (rk->streams_consumer,
+                                rk->rk_conf.streams_consumer_default_stream_name,
+                                group, timeout_ms, &num_groups, &assignment_size,
+                                &assignVector);
+
+
+   struct rd_kafka_group_list *glist = (struct rd_kafka_group_list *)
+                                rd_malloc (sizeof (struct rd_kafka_group_list));
+   glist->groups = (struct rd_kafka_group_info *)
+                  rd_malloc (num_groups * sizeof (struct rd_kafka_group_info));
+
+  glist->group_cnt = num_groups;
+  glist->is_streams_list = true;
+  uint32_t i =0;
+  int curr_gr_count = 0;
+  for ( i = 0; i < assignment_size; i++) {
+
+    uint32_t str_size = 0;
+    char *str;
+    streams_assign_info_get_stream (assignVector, i, (const char **) &str, &str_size);
+    uint32_t t_size = 0;
+    char *topic;
+    streams_assign_info_get_topic (assignVector, i, (const char **) &topic, &t_size);
+
+    uint32_t gr_size = 0;
+    char *group;
+    streams_assign_info_get_groupid (assignVector, i, (const char **) &group, &gr_size);
+
+    char *groupStr = rd_malloc ((gr_size+1) * sizeof (char));
+    memcpy(groupStr, group, gr_size);
+    groupStr[gr_size] = '\0';
+
+    int err = 0;
+    streams_assign_info_get_error (assignVector, i, &err);
+
+    int num_consumers = 0;
+    streams_assign_info_get_num_consumers (assignVector, i, &num_consumers);
+
+    char **consumers;
+    int c_size = 0;
+    streams_assign_info_list_consumers (assignVector, i, &consumers, &c_size);
+
+    int index = -1;
+    bool grExists = false;
+    if (streams_is_group_present (glist, curr_gr_count, groupStr, &index) != -1)
+    {
+        struct rd_kafka_group_info *gi;
+        if (index != -1)
+          grExists = true;
+
+        if(grExists){
+          gi =  &glist->groups[index];
+          if (err != 0)
+            gi->err = streams_to_librdkafka_error_converter (err, 0);
+        } else {
+          gi = &glist->groups[curr_gr_count];
+          memset(gi, 0, sizeof(gi));
+          curr_gr_count++;
+          if (err != 0) {
+             gi->err = streams_to_librdkafka_error_converter (err, 0);
+          } else {
+            gi->err = 0;
+            gi->members = (struct rd_kafka_group_member_info *)
+                        rd_malloc(num_consumers *
+                        sizeof (struct rd_kafka_group_member_info ));
+
+            gi->member_cnt = num_consumers;
+          }
+          gi->group = groupStr;
+          gi->protocol = rd_strndup ("consumer", strlen ("consumer"));
+        }
+        int j = 0;
+        while (!err && !gi->err && (j < num_consumers) ) {
+          struct rd_kafka_group_member_info *mi;
+          int cIndex=-1;
+          bool cExists = false;
+          if (grExists && !gi->err) {
+            if (streams_is_consumer_part_of_group(gi, consumers[j], &cIndex)!= -1) {
+              if (cIndex != -1) {
+                /*consumer exists*/
+                cExists = true;
+                mi = &gi->members[cIndex];
+              } else {
+                /*new consumer*/
+                cExists = false;
+                /*Add new member in group_info*/
+                int oldConsumerCount = gi->member_cnt;
+
+                struct rd_kafka_group_member_info *newMembersPtr =
+                        (struct rd_kafka_group_member_info *)
+                        rd_realloc(gi->members, (oldConsumerCount+1) *
+                        sizeof (struct rd_kafka_group_member_info ));
+                if(newMembersPtr){
+                  gi->members = newMembersPtr;
+                  gi->member_cnt++;
+                } else {
+                  j++;
+                  continue;
+                }
+                mi =  &gi->members[oldConsumerCount];
+              }
+            }
+          } else {
+            mi = &gi->members[j];
+          }
+
+          int a_size = 0;
+          int *assignments;
+          streams_assign_info_get_assignment (assignVector, i, j,
+                                              &assignments, &a_size);
+          err = streams_populate_group_member_info (mi,
+                                    consumers[j], assignments,
+                                    a_size, cExists,
+                                    str, str_size,
+                                    topic, t_size);
+          if (err){
+            gi->err = streams_to_librdkafka_error_converter (err, 0);
+            break;
+          }
+          j++;
+        }
+      }
+  } //end assignment size
+
+  streams_assign_info_destroy_all (assignVector);
+  *grplistp = glist;
+  return RD_KAFKA_RESP_ERR_NO_ERROR;
+} 

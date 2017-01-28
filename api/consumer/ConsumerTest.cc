@@ -958,3 +958,136 @@ rd_kafka_resp_err_t ConsumerTest::runRegexTest (char *stream1, char *stream2, in
 
   return error;
 }
+
+rd_kafka_resp_err_t
+ConsumerTest::runConsumerListTest (char *strName, const char *groupid,
+                                   const struct rd_kafka_group_list ** glist){
+  Producer p;
+  uint64_t cb = 0;
+  int produceMsg = 1000;
+  int ntopics = 2;
+  int nparts = 4;
+  char *group1 = "MultiConGr";
+  char *group2 = "singleConGr";
+  char *clientid1 = "Consumer1";
+  char *clientid2 = "Consumer2";
+  char *clientid3 = "Consumer3";
+  //Produce 1000 messages per partition.
+  p.runTest (strName, 1, ntopics, nparts, produceMsg,
+             200, RD_KAFKA_MSG_F_COPY, false, 0, false, 15, &cb);
+
+  //create consumer1
+  rd_kafka_t *consumer1;
+  rd_kafka_conf_t *conf1 = rd_kafka_conf_new();
+  char defaultStr[strlen(strName) + 2];
+  sprintf(defaultStr, "%s0", strName);
+  char errstr[128];
+  rd_kafka_conf_set(conf1, "streams.consumer.default.stream", defaultStr,
+                    errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf1, "enable.auto.commit", "true", errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf1, "client.id", clientid1, errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf1, "group.id", group1, errstr, sizeof(errstr));
+  rd_kafka_topic_conf_t *topic_conf1 = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf1, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf1, topic_conf1);
+  consumer1 = rd_kafka_new (RD_KAFKA_CONSUMER, conf1, errstr, sizeof(errstr));
+  //create consumer2
+  rd_kafka_t *consumer2;
+  rd_kafka_conf_t *conf2 = rd_kafka_conf_new();
+  rd_kafka_conf_set(conf2, "streams.consumer.default.stream", defaultStr,
+                    errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf2, "enable.auto.commit", "true", errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf2, "client.id", clientid2, errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf2, "group.id", group1, errstr, sizeof(errstr));
+  rd_kafka_topic_conf_t *topic_conf2 = rd_kafka_topic_conf_new();
+    rd_kafka_topic_conf_set(topic_conf2, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf2, topic_conf2);
+  consumer2 = rd_kafka_new (RD_KAFKA_CONSUMER, conf2, errstr, sizeof(errstr));
+
+  //create consumer3
+  rd_kafka_t *consumer3;
+  rd_kafka_conf_t *conf3 = rd_kafka_conf_new();
+  rd_kafka_conf_set(conf3, "streams.consumer.default.stream", defaultStr,
+                    errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf3, "enable.auto.commit", "true", errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf3, "client.id", clientid3, errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf3, "group.id", group2, errstr, sizeof(errstr));
+  rd_kafka_topic_conf_t *topic_conf3 = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf3, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf3, topic_conf3);
+  consumer3 = rd_kafka_new (RD_KAFKA_CONSUMER, conf3, errstr, sizeof(errstr));
+
+  rd_kafka_topic_partition_list_t *tp_list1 =
+                                rd_kafka_topic_partition_list_new(0);
+  rd_kafka_topic_partition_list_t *tp_list2 =
+                                rd_kafka_topic_partition_list_new(0);
+  rd_kafka_topic_partition_list_t *tp_list3 =
+                                rd_kafka_topic_partition_list_new(0);
+  char currentName[100];
+  //populate tp list for consumer
+  for (int t = 0; t < ntopics; ++t) {
+    memset ( currentName, '\0', 100);
+    snprintf(currentName, sizeof (currentName),"%s0:topic%d",  strName, t);
+    if (t == 0) {
+      rd_kafka_topic_partition_list_add(tp_list1, currentName, RD_KAFKA_PARTITION_UA);
+      rd_kafka_topic_partition_list_add(tp_list2, currentName, RD_KAFKA_PARTITION_UA);
+    }
+    if (t == 1) {
+      rd_kafka_topic_partition_list_add(tp_list1, currentName, RD_KAFKA_PARTITION_UA);
+      rd_kafka_topic_partition_list_add(tp_list3, currentName, RD_KAFKA_PARTITION_UA);
+    }
+  }
+
+  rd_kafka_subscribe (consumer1, tp_list1);
+  rd_kafka_subscribe (consumer2, tp_list2);
+  rd_kafka_subscribe (consumer3, tp_list3);
+
+  int msgCount1 = 0;
+  int msgCount2 = 0;
+  int msgCount3 = 0;
+  int totalMsg = produceMsg * ntopics * nparts;
+  while ((msgCount1 < totalMsg/2) && ((msgCount2+msgCount3) < totalMsg/2)) {
+    rd_kafka_message_t *rkmessage1;
+    rd_kafka_message_t *rkmessage2;
+    rd_kafka_message_t *rkmessage3;
+    rkmessage1 = rd_kafka_consumer_poll (consumer1, 100);
+    rkmessage2 = rd_kafka_consumer_poll (consumer2, 100);
+    rkmessage3 = rd_kafka_consumer_poll (consumer3, 100);
+    if (rkmessage1) {
+      msgCount1 ++;
+      rd_kafka_message_destroy (rkmessage1);
+    }
+    if (rkmessage2) {
+      msgCount2 ++;
+      rd_kafka_message_destroy (rkmessage2);
+    }
+    if (rkmessage3) {
+      msgCount3 ++;
+      rd_kafka_message_destroy (rkmessage3);
+    }
+  }
+
+  rd_kafka_resp_err_t ret = RD_KAFKA_RESP_ERR_NO_ERROR;
+  struct rd_kafka_group_list *grplistp;
+  while (1) {
+    sleep(5);
+    ret = rd_kafka_list_groups (consumer1, groupid,
+        (const struct rd_kafka_group_list **) &grplistp, 1000);
+    break;
+  }
+
+  *glist = grplistp;
+  rd_kafka_consumer_close(consumer1);
+  rd_kafka_consumer_close(consumer2);
+  rd_kafka_consumer_close(consumer3);
+
+  rd_kafka_destroy(consumer1);
+  rd_kafka_destroy(consumer2);
+  rd_kafka_destroy(consumer3);
+
+  return ret;
+}
+
