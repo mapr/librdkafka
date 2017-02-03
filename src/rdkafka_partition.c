@@ -1989,14 +1989,16 @@ void rd_kafka_topic_partition_get (const rd_kafka_topic_partition_t *rktpar,
 static void
 rd_kafka_topic_partition_list_grow (rd_kafka_topic_partition_list_t *rktparlist,
                                     int add_size) {
-        if (add_size < rktparlist->size)
+        if(rktparlist){
+          if (add_size < rktparlist->size)
                 add_size = RD_MAX(rktparlist->size, 32);
 
-        rktparlist->size += add_size;
-        rktparlist->elems = rd_realloc(rktparlist->elems,
+          rktparlist->size += add_size;
+          rktparlist->elems = rd_realloc(rktparlist->elems,
                                        sizeof(*rktparlist->elems) *
                                        rktparlist->size);
 
+        }
 }
 /**
  * Create a list for fitting 'size' topic_partitions (rktp).
@@ -2018,13 +2020,15 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size) {
 
 static void
 rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
-	if (rktpar->topic)
-		rd_free(rktpar->topic);
-	if (rktpar->metadata)
-		rd_free(rktpar->metadata);
-	if (rktpar->_private)
-		rd_kafka_toppar_destroy((shptr_rd_kafka_toppar_t *)
+	if (rktpar) {
+	  if (rktpar->topic)
+		  rd_free(rktpar->topic);
+	  if (rktpar->metadata)
+		  rd_free(rktpar->metadata);
+	  if (rktpar->_private)
+		  rd_kafka_toppar_destroy((shptr_rd_kafka_toppar_t *)
 					rktpar->_private);
+  }
 }
 
 
@@ -2034,15 +2038,17 @@ rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
  */
 void
 rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rktparlist) {
-        int i;
+        if(rktparlist) {
+          int i;
 
-        for (i = 0 ; i < rktparlist->cnt ; i++)
-		rd_kafka_topic_partition_destroy(&rktparlist->elems[i]);
+          for (i = 0 ; i < rktparlist->cnt ; i++)
+		  rd_kafka_topic_partition_destroy(&rktparlist->elems[i]);
 
-        if (rktparlist->elems)
+          if (rktparlist->elems)
                 rd_free(rktparlist->elems);
 
-        rd_free(rktparlist);
+          rd_free(rktparlist);
+        }
 }
 
 
@@ -2059,17 +2065,20 @@ rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,
                                     void *_private) {
         rd_kafka_topic_partition_t *rktpar;
-        if (rktparlist->cnt == rktparlist->size)
-                rd_kafka_topic_partition_list_grow(rktparlist, 1);
-        rd_kafka_assert(NULL, rktparlist->cnt < rktparlist->size);
+        if(rktparlist && topic){
+          if (rktparlist->cnt == rktparlist->size)
+                  rd_kafka_topic_partition_list_grow(rktparlist, 1);
+          rd_kafka_assert(NULL, rktparlist->cnt < rktparlist->size);
 
-        rktpar = &rktparlist->elems[rktparlist->cnt++];
-        memset(rktpar, 0, sizeof(*rktpar));
-        rktpar->topic = rd_strdup(topic);
-        rktpar->partition = partition;
-	rktpar->offset = RD_KAFKA_OFFSET_INVALID;
-        rktpar->_private = _private;
-
+          rktpar = &rktparlist->elems[rktparlist->cnt++];
+          memset(rktpar, 0, sizeof(*rktpar));
+          rktpar->topic = rd_strdup(topic);
+          rktpar->partition = partition;
+	  rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+          rktpar->_private = _private;
+        } else {
+          rktpar = NULL;
+        }
         return rktpar;
 }
 
@@ -2103,10 +2112,10 @@ rd_kafka_topic_partition_list_t *
 rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src){
         rd_kafka_topic_partition_list_t *dst;
         int i;
+        if(src) {
+          dst = rd_kafka_topic_partition_list_new(src->size);
 
-        dst = rd_kafka_topic_partition_list_new(src->size);
-
-        for (i = 0 ; i < src->cnt ; i++) {
+          for (i = 0 ; i < src->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar;
                 rktpar = rd_kafka_topic_partition_list_add0(
                         dst,
@@ -2127,6 +2136,9 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src){
                         memcpy((void *)rktpar->metadata, src->elems[i].metadata,
                                src->elems[i].metadata_size);
                 }
+          }
+        } else {
+          dst = NULL;
         }
         return dst;
 }
@@ -2168,6 +2180,8 @@ rd_kafka_topic_partition_list_find0 (rd_kafka_topic_partition_list_t *rktparlist
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 				     const char *topic, int32_t partition) {
+	if (!rktparlist || !topic)
+		return NULL;
 	int i = rd_kafka_topic_partition_list_find0(rktparlist,
 						    topic, partition);
 	if (i == -1)
@@ -2180,13 +2194,13 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 int
 rd_kafka_topic_partition_list_del_by_idx (rd_kafka_topic_partition_list_t *rktparlist,
 					  int idx) {
-	if (unlikely(idx < 0 || idx >= rktparlist->cnt))
+	if (!rktparlist || unlikely(idx < 0 || idx >= rktparlist->cnt))
 		return 0;
 
 	rktparlist->cnt--;
 	rd_kafka_topic_partition_destroy(&rktparlist->elems[idx]);
 	memmove(&rktparlist->elems[idx], &rktparlist->elems[idx+1],
-		rktparlist->cnt - idx);
+		(rktparlist->cnt - idx) * sizeof(rktparlist->elems[idx]));
 
 	return 1;
 }
@@ -2195,6 +2209,8 @@ rd_kafka_topic_partition_list_del_by_idx (rd_kafka_topic_partition_list_t *rktpa
 int
 rd_kafka_topic_partition_list_del (rd_kafka_topic_partition_list_t *rktparlist,
 				   const char *topic, int32_t partition) {
+	if (!rktparlist || !topic)
+		return 0;
 	int i = rd_kafka_topic_partition_list_find0(rktparlist,
 						    topic, partition);
 	if (i == -1)
@@ -2274,6 +2290,9 @@ void rd_kafka_topic_partition_list_sort_by_topic (
 rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
 	rd_kafka_topic_partition_list_t *rktparlist,
 	const char *topic, int32_t partition, int64_t offset) {
+	if(!rktparlist || !topic)
+		return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
 	rd_kafka_topic_partition_t *rktpar;
 
 	if (!(rktpar = rd_kafka_topic_partition_list_find(rktparlist,
@@ -2312,7 +2331,9 @@ int rd_kafka_topic_partition_list_set_offsets (
 	rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *rktparlist,
         int from_rktp, int64_t def_value, int is_commit) {
-        int i;
+        if(!rktparlist || !rk)
+              return RD_KAFKA_RESP_ERR__INVALID_ARG;
+	int i;
 	int valid_cnt = 0;
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {

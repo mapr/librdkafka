@@ -76,6 +76,8 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
  * Application destroy
  */
 void rd_kafka_topic_destroy (rd_kafka_topic_t *app_rkt) {
+        if(!app_rkt)
+          return;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         shptr_rd_kafka_itopic_t *s_rkt = rd_kafka_topic_a2s(app_rkt);
 
@@ -247,6 +249,8 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
  */
 rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
                                       rd_kafka_topic_conf_t *conf) {
+        if (!rk || !topic || !conf)
+          return NULL;
         shptr_rd_kafka_itopic_t *s_rkt;
         rd_kafka_itopic_t *rkt;
         int existing;
@@ -298,6 +302,8 @@ static void rd_kafka_topic_set_state (rd_kafka_itopic_t *rkt, int state) {
  *   This is not true for Kafka Strings read from the network.
  */
 const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
+	if(!app_rkt)
+	  return NULL;
         const rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
 	return rkt->rkt_topic->str;
 }
@@ -952,6 +958,8 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
  */
 int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 					int32_t partition) {
+        if(!app_rkt)
+                return 0;
 	int avail;
 	shptr_rd_kafka_toppar_t *s_rktp;
         rd_kafka_toppar_t *rktp;

@@ -38,7 +38,9 @@
 #include "rdsysqueue.h"
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
-	if (!is_streams_producer(rk)) {
+  if(!rk || !rkm)
+    return;
+  if (!is_streams_producer(rk)) {
 		rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
 		(void)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
 
@@ -212,7 +214,12 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         rd_ts_t now = rd_clock();
         int good = 0;
         rd_kafka_resp_err_t all_err = 0;
-        rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+
+  if(!app_rkt || !rkmessages) {
+    rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+    return -1;
+  }
+  rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
 
   if(rkt==NULL || rkt->rkt_topic == NULL || rkt->rkt_topic->str == NULL) {
     rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);

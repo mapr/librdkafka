@@ -4825,6 +4825,8 @@ static int rd_kafka_broker_name_parse (rd_kafka_t *rk,
  * Lock prereqs: none
  */
 int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist) {
+	if(!rk || !brokerlist)
+		return 0;
 	char *s_copy = rd_strdup(brokerlist);
 	char *s = s_copy;
 	int cnt = 0;

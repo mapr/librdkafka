@@ -517,6 +517,8 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 /* NOTE: Must only be called by application.
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy (rd_kafka_t *rk) {
+	if (!rk)
+		return;
 	if (is_streams_producer(rk)) {
 		streams_producer_destroy(rk->streams_producer);
 	} else if (is_streams_consumer(rk)) {
@@ -1475,7 +1477,11 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt,
 		      const void *key,
 		      size_t keylen,
 		      void *msg_opaque) {
-	rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
+        if(!rkt){
+                rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return -1;
+        }
+        rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
 	if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL){
 	  rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
     return -1;
@@ -1712,6 +1718,8 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                                    int32_t partition,
                                    int64_t offset,
                                    int timeout_ms) {
+        if(!app_rkt)
+              return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         if(rkt==NULL || rkt->rkt_topic == NULL ||
                             rkt->rkt_topic->str == NULL)
@@ -2041,6 +2049,8 @@ rd_kafka_message_t *rd_kafka_consume_queue (rd_kafka_queue_t *rkqu,
 
 
 rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk) {
+        if (!rk)
+              return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_cgrp_t *rkcg;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
@@ -2156,7 +2166,7 @@ rd_kafka_committed (rd_kafka_t *rk,
 		    rd_kafka_topic_partition_list_t *partitions,
 		    int timeout_ms) {
 
-        if (!rk)
+        if (!rk || !partitions)
           return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_q_t *replyq;
         rd_kafka_resp_err_t err;
@@ -2258,10 +2268,10 @@ streams_rd_kafka_position_wrapper (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_position (rd_kafka_t *rk,
 		   rd_kafka_topic_partition_list_t *partitions) {
-	int i;
-  rd_kafka_resp_err_t err;
-  if (!rk)
+  if (!rk || !partitions)
     return RD_KAFKA_RESP_ERR__INVALID_ARG;
+	int i;
+	rd_kafka_resp_err_t err;
 	/* Set default offsets. */
 	rd_kafka_topic_partition_list_reset_offsets(partitions,
 						    RD_KAFKA_OFFSET_INVALID);
@@ -2599,6 +2609,10 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
+        if(!rk) {
+                rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return -1;
+        }
 	return rd_kafka_q_serve(&rk->rk_rep, timeout_ms, 0,
 				_Q_CB_GLOBAL, rd_kafka_poll_cb, NULL);
 }
@@ -2775,11 +2789,17 @@ char *rd_kafka_memberid (const rd_kafka_t *rk) {
 
 
 void *rd_kafka_opaque (const rd_kafka_t *rk) {
-        return rk->rk_conf.opaque;
+  if(!rk)
+    return NULL;
+  return rk->rk_conf.opaque;
 }
 
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
+  if(!rk){
+      rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+      return -1;
+  }
   int count = 0;
   if (is_streams_producer (rk))
     streams_producer_send_buffer_get_size(rk->streams_producer, &count);
@@ -3088,7 +3108,8 @@ rd_kafka_resp_err_t
 rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                       const struct rd_kafka_group_list **grplistp,
                       int timeout_ms) {
-
+        if (!rk || !grplistp)
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
         struct rd_kafka_group_list *g_list;
         if (is_streams_consumer (rk)) {
             rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -3171,6 +3192,8 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
 
 
 void rd_kafka_group_list_destroy (const struct rd_kafka_group_list *grplist0) {
+        if(!grplist0)
+          return;
         struct rd_kafka_group_list *grplist =
                 (struct rd_kafka_group_list *)grplist0;
 

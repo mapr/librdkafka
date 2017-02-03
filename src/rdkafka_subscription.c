@@ -400,9 +400,9 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
 		    const rd_kafka_topic_partition_list_t *topics) {
-  if(!rk)
+  if(!rk || !topics)
      return RD_KAFKA_RESP_ERR__INVALID_ARG;
-	rd_kafka_resp_err_t err;
+  rd_kafka_resp_err_t err;
   rd_kafka_op_t *rko;
   rd_kafka_cgrp_t *rkcg;
 
@@ -490,7 +490,7 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *partitions) {
-        if (!rk)
+        if (!rk || !partitions)
           return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
@@ -543,7 +543,7 @@ rd_kafka_resp_err_t
 rd_kafka_assignment (rd_kafka_t *rk,
                      rd_kafka_topic_partition_list_t **partitions) {
 
-        if (!rk)
+        if (!rk || !partitions)
           return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err;
@@ -597,7 +597,7 @@ streams_rd_kafka_subscription_wrapper (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_subscription (rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t **topics){
-        if(!rk)
+        if(!rk || !topics)
           return RD_KAFKA_RESP_ERR__INVALID_ARG;
         if (rk->rk_type != RD_KAFKA_CONSUMER)
           return RD_KAFKA_RESP_ERR__INVALID_ARG;

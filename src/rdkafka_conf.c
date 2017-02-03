@@ -1148,6 +1148,8 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void) {
 static int rd_kafka_anyconf_set (int scope, void *conf,
 				 const char *name, const char *value,
 				 char *errstr, size_t errstr_size) {
+	if(!conf)
+		return RD_KAFKA_CONF_UNKNOWN;
 	char estmp[1];
 	const struct rd_kafka_property *prop;
 
@@ -1196,6 +1198,8 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 					     const char *name,
 					     const char *value,
 					     char *errstr, size_t errstr_size) {
+	if(!name)
+		return RD_KAFKA_CONF_UNKNOWN;
 	if (!strncmp(name, "topic.", strlen("topic.")))
 		name += strlen("topic.");
 
@@ -1262,6 +1266,8 @@ static void rd_kafka_anyconf_clear (void *conf,
 }
 
 void rd_kafka_anyconf_destroy (int scope, void *conf) {
+	if(!conf)
+		return;
 	const struct rd_kafka_property *prop;
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
@@ -1287,6 +1293,8 @@ void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 
 
 static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
+	if(!src || !dst)
+		return;
 	const struct rd_kafka_property *prop;
 
 	for (prop = rd_kafka_properties ; prop->name ; prop++) {
@@ -1367,7 +1375,8 @@ void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
 					     void *payload, size_t len,
 					     rd_kafka_resp_err_t err,
 					     void *opaque, void *msg_opaque)) {
-	conf->dr_cb = dr_cb;
+	if(conf)
+	  conf->dr_cb = dr_cb;
 }
 
 
@@ -1376,7 +1385,8 @@ void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
                                                      const rd_kafka_message_t *
                                                      rkmessage,
                                                      void *opaque)) {
-        conf->dr_msg_cb = dr_msg_cb;
+	if(conf)
+	  conf->dr_msg_cb = dr_msg_cb;
 }
 
 
@@ -1384,7 +1394,8 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
                                    void (*consume_cb) (rd_kafka_message_t *
                                                        rkmessage,
                                                        void *opaque)) {
-        conf->consume_cb = consume_cb;
+	if(conf)
+	  conf->consume_cb = consume_cb;
 }
 
 void rd_kafka_conf_set_rebalance_cb (
@@ -1393,7 +1404,8 @@ void rd_kafka_conf_set_rebalance_cb (
                               rd_kafka_resp_err_t err,
                               rd_kafka_topic_partition_list_t *partitions,
                               void *opaque)) {
-        conf->rebalance_cb = rebalance_cb;
+	if(conf)
+	  conf->rebalance_cb = rebalance_cb;
 }
 
 void rd_kafka_conf_set_offset_commit_cb (
@@ -1402,7 +1414,8 @@ void rd_kafka_conf_set_offset_commit_cb (
                                   rd_kafka_resp_err_t err,
                                   rd_kafka_topic_partition_list_t *offsets,
                                   void *opaque)) {
-        conf->offset_commit_cb = offset_commit_cb;
+	if(conf)
+	  conf->offset_commit_cb = offset_commit_cb;
 }
 
 
@@ -1411,7 +1424,8 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 				 void  (*error_cb) (rd_kafka_t *rk, int err,
 						    const char *reason,
 						    void *opaque)) {
-	conf->error_cb = error_cb;
+	if(conf)
+	  conf->error_cb = error_cb;
 }
 
 
@@ -1422,14 +1436,16 @@ void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
 					    int32_t broker_id,
 					    int throttle_time_ms,
 					    void *opaque)) {
-	conf->throttle_cb = throttle_cb;
+	if(conf)
+	  conf->throttle_cb = throttle_cb;
 }
 
 
 void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
 			  void (*log_cb) (const rd_kafka_t *rk, int level,
                                           const char *fac, const char *buf)) {
-	conf->log_cb = log_cb;
+	if(conf)
+	  conf->log_cb = log_cb;
 }
 
 
@@ -1438,14 +1454,16 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
 						  char *json,
 						  size_t json_len,
 						  void *opaque)) {
-	conf->stats_cb = stats_cb;
+	if(conf)
+	  conf->stats_cb = stats_cb;
 }
 
 void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
                                   int (*socket_cb) (int domain, int type,
                                                     int protocol,
                                                     void *opaque)) {
-        conf->socket_cb = socket_cb;
+	if(conf)
+	  conf->socket_cb = socket_cb;
 }
 
 
@@ -1454,17 +1472,21 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                 int (*open_cb) (const char *pathname,
                                                 int flags, mode_t mode,
                                                 void *opaque)) {
-        conf->open_cb = open_cb;
+	if(conf)
+	  conf->open_cb = open_cb;
 }
 #endif
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
-	conf->opaque = opaque;
+	if(conf)
+	  conf->opaque = opaque;
 }
 
 
 void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
                                            rd_kafka_topic_conf_t *tconf) {
+        if(conf)
+          return;
         if (conf->topic_conf)
                 rd_kafka_topic_conf_destroy(conf->topic_conf);
 
@@ -1482,13 +1504,16 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 						void *rkt_opaque,
 						void *msg_opaque)) {
 
-  topic_conf->user_defined_partitioner = true;
-  topic_conf->partitioner = partitioner;
+  if(topic_conf){
+    topic_conf->user_defined_partitioner = true;
+    topic_conf->partitioner = partitioner;
+  }
 }
 
 void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,
 				     void *opaque) {
-	topic_conf->opaque = opaque;
+  if(topic_conf)
+	  topic_conf->opaque = opaque;
 }
 
 
@@ -1654,6 +1679,8 @@ rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
 static rd_kafka_conf_res_t rd_kafka_anyconf_get (int scope, const void *conf,
                                                  const char *name,
                                                  char *dest, size_t *dest_size){
+	if(!conf || !name)
+		return RD_KAFKA_CONF_UNKNOWN;
 	const struct rd_kafka_property *prop;
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
@@ -1689,6 +1716,8 @@ rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
 
 static const char **rd_kafka_anyconf_dump (int scope, const void *conf,
 					   size_t *cntp) {
+	if(!conf)
+		return NULL;
 	const struct rd_kafka_property *prop;
 	char **arr;
 	int cnt = 0;

@@ -645,8 +645,8 @@ rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *offsets,
 								 int async) {
-	if(!rk)
-		return RD_KAFKA_RESP_ERR__INVALID_ARG;
+	if(!rk || !offsets)
+    return RD_KAFKA_RESP_ERR__INVALID_ARG;
 	rd_kafka_cgrp_t *rkcg;
 	rd_kafka_resp_err_t err;
 	rd_kafka_q_t *tmpq = NULL;
@@ -681,8 +681,8 @@ rd_kafka_commit (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                          int async) {
-        if (!rk)
-           return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (!rk && !rkmessage)
+          return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
         rd_kafka_resp_err_t err;
