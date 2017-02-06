@@ -232,7 +232,7 @@ int ErrorCodeTest::runPartitionEOFErrorCodeTest(char *strName, char *topic,
     rd_kafka_produce (topic_t, 0, 0, (void *)value, strlen (value), NULL, 0, NULL);
   }
 
-  retVal = rd_kafka_subscribe(consumer, tp_list);
+  int retVal = rd_kafka_subscribe(consumer, tp_list);
 
   if(tp_list)
     rd_kafka_topic_partition_list_destroy(tp_list);
