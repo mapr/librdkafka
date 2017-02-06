@@ -2290,7 +2290,7 @@ void rd_kafka_topic_partition_list_sort_by_topic (
 rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
 	rd_kafka_topic_partition_list_t *rktparlist,
 	const char *topic, int32_t partition, int64_t offset) {
-	if(!rktparlist || !topic)
+	if(!rktparlist || !topic || (offset < 0))
 		return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
 	rd_kafka_topic_partition_t *rktpar;
