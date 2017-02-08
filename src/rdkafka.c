@@ -2609,10 +2609,9 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
-        if(!rk) {
-                rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-                return -1;
-        }
+        if(!rk)
+                return 0;
+
 	return rd_kafka_q_serve(&rk->rk_rep, timeout_ms, 0,
 				_Q_CB_GLOBAL, rd_kafka_poll_cb, NULL);
 }
@@ -2797,8 +2796,7 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
   if(!rk){
-      rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-      return -1;
+      return 0;
   }
   int count = 0;
   if (is_streams_producer (rk))

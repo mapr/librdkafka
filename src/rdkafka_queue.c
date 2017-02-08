@@ -259,7 +259,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
 	char *topic_name;
 	streams_topic_partition_get_topic_name (tp,
 						&topic_name);
-	int32_t partitionId = 0;
+	int32_t partitionId = RD_KAFKA_PARTITION_UA;
 	streams_topic_partition_get_partition_id (tp,
 						  &partitionId);
 	uint32_t numMsgs = 0;
@@ -303,6 +303,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
                   &(rkm->offset));
     if (rkm->offset == 0) {
       rkm->err = RD_KAFKA_RESP_ERR__PARTITION_EOF;
+      rkm->partition = partitionId;
       rko->rko_rkmessage = *rkm;
       rko->rko_err = rkm->err;
       rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
@@ -557,6 +558,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 
 void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
+	if (!rkmessage)
+		return;
 	rd_kafka_op_t *rko;
 
 	if (likely((rko = (rd_kafka_op_t *)rkmessage->_private) != NULL))

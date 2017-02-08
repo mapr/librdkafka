@@ -1936,7 +1936,7 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *c
    if (conf.topic_conf->auto_offset_reset == RD_KAFKA_OFFSET_BEGINNING)
      snprintf (offset_str, sizeof (offset_str), "earliest" );
    else if (conf.topic_conf->auto_offset_reset == RD_KAFKA_OFFSET_END)
-     snprintf (offset_str, sizeof (offset_str), "largest" );
+     snprintf (offset_str, sizeof (offset_str), "latest" );
    else if (conf.topic_conf->auto_offset_reset == RD_KAFKA_OFFSET_INVALID)
      printf("NOT SUPPORTED");//throw error?
 
