@@ -116,7 +116,7 @@ int verifyAndAddStats(rd_kafka_message_t *rkmessage, ConsumerPerfStats *stats,
   if (!autoCommit) {
     char msgTopicStr[strlen(msg_topic_name)+1];
     strncpy(msgTopicStr, msg_topic_name, strlen(msg_topic_name));
-    msgTopicStr[strlen(msg_topic_name)+1] = '\0';
+    msgTopicStr[strlen(msg_topic_name)] = '\0';
 
     char newKey[200];
     memset(newKey, '\0', 200);

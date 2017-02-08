@@ -1485,7 +1485,7 @@ void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 
 void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
                                            rd_kafka_topic_conf_t *tconf) {
-        if(conf)
+        if(!conf)
           return;
         if (conf->topic_conf)
                 rd_kafka_topic_conf_destroy(conf->topic_conf);
