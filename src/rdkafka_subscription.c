@@ -580,8 +580,8 @@ streams_rd_kafka_subscription_wrapper (rd_kafka_t *rk,
 
   int err =   streams_consumer_get_subscription (rk->streams_consumer,
                                      &streams_topics, &tcount );
-  if(!*topics)
-    *topics = rd_kafka_topic_partition_list_new(0);
+
+  *topics = rd_kafka_topic_partition_list_new(0);
   if (err == 0) {
     uint32_t i = 0;
     for (i = 0; i < tcount ; i++) {

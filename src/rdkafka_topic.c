@@ -249,7 +249,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
  */
 rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
                                       rd_kafka_topic_conf_t *conf) {
-        if (!rk || !topic || !conf)
+        if (!rk || !topic)
           return NULL;
         shptr_rd_kafka_itopic_t *s_rkt;
         rd_kafka_itopic_t *rkt;

@@ -190,10 +190,14 @@ void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
 void rd_kafka_set_logger (rd_kafka_t *rk,
 			  void (*func) (const rd_kafka_t *rk, int level,
 					const char *fac, const char *buf)) {
+	if(!rk)
+	      return;
 	rk->rk_conf.log_cb = func;
 }
 
 void rd_kafka_set_log_level (rd_kafka_t *rk, int level) {
+	if(!rk)
+	      return;
 	rk->rk_conf.log_level = level;
 }
 
@@ -365,6 +369,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 
 void rd_kafka_get_err_descs (const struct rd_kafka_err_desc **errdescs,
 			     size_t *cntp) {
+	if(!errdescs || !cntp)
+		return;
 	*errdescs = rd_kafka_err_descs;
 	*cntp = RD_ARRAYSIZE(rd_kafka_err_descs);
 }
@@ -372,6 +378,10 @@ void rd_kafka_get_err_descs (const struct rd_kafka_err_desc **errdescs,
 
 const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 	static RD_TLS char ret[32];
+	if (!err){
+		rd_snprintf(ret, sizeof(ret), "Err-(null)?");
+		return ret;
+	}
 	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||
@@ -387,6 +397,10 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 
 const char *rd_kafka_err2name (rd_kafka_resp_err_t err) {
 	static RD_TLS char ret[32];
+	if (!err){
+		rd_snprintf(ret, sizeof(ret), "Err-(null)?");
+		return ret;
+	}
 	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||

@@ -702,7 +702,7 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
 static RD_INLINE const char *
 RD_UNUSED 
 rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
-	if (!rkmessage->err)
+	if (!rkmessage || !rkmessage->err)
 		return NULL;
 
 	if (rkmessage->payload)
