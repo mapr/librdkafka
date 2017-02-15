@@ -1130,9 +1130,55 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
                                                    NULL, 0);
 	}
 }
+bool streams_version_check (char *buf1, char *buf2){
+  bool ver_allowed = false;
+  if (!buf1 || !buf2)
+    return ver_allowed;
 
+  char curr_version [strlen(buf1)+1];
+  char min_version [strlen(buf2)+1];
+  strcpy(curr_version, buf1);
+  strcpy(min_version, buf2);
+  char *currPtr;
+  char *minPtr;
+  char *min_token = strtok_r(min_version, ".", &minPtr);
+  char *curr_token = strtok_r(curr_version, ".", &currPtr);
+  int count = 0;
+  //Only compare Major, minor and revision in a version
+  while (curr_token && min_token && (count < 3)) {
+    if (atoi(curr_token) >= atoi(min_token)) {
+      ver_allowed = true;
+      count ++;
+      curr_token = strtok_r(NULL, ".", &currPtr);
+      min_token = strtok_r(NULL, ".", &minPtr);
+    } else {
+      ver_allowed = false;
+      break;
+    }
+  }
+  streams_mapr_build_version_destroy(buf1);
+  return ver_allowed;
+}
 rd_kafka_conf_t *rd_kafka_conf_new (void) {
-	rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
+  if (!is_streams_compatible) {
+    bool isPresent = is_funct_present("streams_mapr_build_version_get");
+    char errStr[512];
+    snprintf(errStr, 512, "\nLibrary mismatch, minimum required version: %s\n",
+                          STREAMS_MIN_VERSION);
+    ASSERT_(isPresent, errStr);
+
+    char *version = NULL;
+    streams_mapr_build_version_get(&version);
+
+    ASSERT_(version, errStr);
+    memset (errStr, 0, 512);
+    snprintf(errStr, 512, "\nLibrary mismatch, libMaprClient.so version: %s\
+        minimum required version: %s\n",version, STREAMS_MIN_VERSION);
+    ASSERT_(streams_version_check (version, STREAMS_MIN_VERSION), errStr );
+
+    is_streams_compatible = true;
+  }
+  rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
 	rd_kafka_defaultconf_set(_RK_GLOBAL, conf);
 	return conf;
 }
@@ -1913,7 +1959,6 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *c
 
   streams_config_set (*config, "streams.parallel.flushers.per.partition",
                       conf.streams_parallel_flushers_per_partition?"true":"false");
-  //TODO: conf.max_msg_size
   char size_str[16];
   memset (size_str, 0, sizeof(size_str));
   snprintf(size_str, sizeof (size_str), "%d", conf.max_msg_size);
@@ -1946,4 +1991,25 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *c
   if (conf.streams_consumer_default_stream_name)
     streams_config_set (*config, "streams.consumer.default.stream",
                         conf.streams_consumer_default_stream_name);
+}
+
+bool is_funct_present(const char *funct) {
+  char *library = NULL; /*dlopen returns handle of main program if filename=NULL */
+  char* dlerr;
+
+  /* Library Handle */
+  void* libHandle;
+  libHandle = dlopen(library, RTLD_NOW | RTLD_GLOBAL);
+  if (libHandle == NULL)
+  {
+    dlerr = dlerror();
+    fprintf(stderr, "Failed to load librdkafka library %s: (dlopen)", dlerr);
+    return false;
+  }
+
+  void *funcExists = dlsym(libHandle, funct);
+  if (!funcExists)
+    return false;
+
+  return true;
 }

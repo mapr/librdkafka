@@ -166,6 +166,22 @@ streams_config_destroy(streams_config_t config);
 STREAMS_API int32_t
 streams_config_print(const streams_config_t config);
 
+/** \brief Get Mapr streams core package version.
+ *  \param version [OUT] : streams core package version
+ *
+ *  \return 0 on success. EINVAL on invalid inputs.
+ */
+STREAMS_API int32_t
+streams_mapr_build_version_get(char **version);
+
+/** \brief Delete version buffer.
+ *  \param version [IN] : streams core package version
+ *  returned from streams_mapr_build_version_get api
+ *
+ */
+STREAMS_API void
+streams_mapr_build_version_destroy(char *version);
+
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif

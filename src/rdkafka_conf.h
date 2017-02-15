@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rdlist.h"
+#include <dlfcn.h>
 
 /**
  * MessageSet compression codecs
@@ -44,6 +45,8 @@ typedef enum {
 } rd_kafka_offset_method_t;
 
 
+static bool is_streams_compatible = false;
+#define ASSERT_(condition, message) { if(!(condition)){ printf ("%s", message);abort();}}
 
 
 /**
@@ -276,3 +279,5 @@ struct rd_kafka_topic_conf_s {
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
 void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *config);
+
+bool is_funct_present(const char *funct);
