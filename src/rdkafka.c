@@ -1050,6 +1050,10 @@ static void rd_kafka_global_init (void) {
 
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
+  if(errstr && (errstr_size < sizeof(errstr))) {
+        rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+        return NULL;
+  }
   rd_kafka_t *rk;
 	static rd_atomic32_t rkid;
 #ifndef _MSC_VER

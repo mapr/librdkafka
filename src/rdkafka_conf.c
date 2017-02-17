@@ -1194,7 +1194,7 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void) {
 static int rd_kafka_anyconf_set (int scope, void *conf,
 				 const char *name, const char *value,
 				 char *errstr, size_t errstr_size) {
-	if(!conf)
+	if(!conf || !name)
 		return RD_KAFKA_CONF_UNKNOWN;
 	char estmp[1];
 	const struct rd_kafka_property *prop;

@@ -2004,6 +2004,10 @@ rd_kafka_topic_partition_list_grow (rd_kafka_topic_partition_list_t *rktparlist,
  * Create a list for fitting 'size' topic_partitions (rktp).
  */
 rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size) {
+        if  (size < 0) {
+                fprintf(stderr, "%%Invalid Size %i\n", size);
+                return NULL;
+        }
         rd_kafka_topic_partition_list_t *rktparlist;
 
         rktparlist = rd_calloc(1, sizeof(*rktparlist));
