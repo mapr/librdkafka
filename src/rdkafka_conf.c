@@ -767,6 +767,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ 0, /* End */ }
 };
 
+/**
+ * List of config properties which will not be
+ * defined in Mapr's version of librdkafka.
+ */
+static const char* streams_unsupported_properties[] = {
+           "ssl.cipher.suites",
+           "ssl.key.location",
+           "ssl.key.password",
+           "ssl.certificate.location",
+           "ssl.ca.location",
+           "ssl.crl.location"
+};
 
 typedef enum {
 	_PROP_SET_REPLACE,  /* Replace current value (default) */
@@ -1189,6 +1201,16 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void) {
 	return tconf;
 }
 
+static bool streams_is_config_supported(const char *name) {
+        int arr_len = sizeof(streams_unsupported_properties)/sizeof (char *);
+        int i = 0;
+        for (i = 0; i < arr_len; i++ ) {
+                if (strcmp (streams_unsupported_properties[i], name))
+                        continue;
+                return false;
+        }
+        return true;
+}
 
 
 static int rd_kafka_anyconf_set (int scope, void *conf,
@@ -1224,9 +1246,13 @@ static int rd_kafka_anyconf_set (int scope, void *conf,
 						 errstr, errstr_size);
 	}
 
-	rd_snprintf(errstr, errstr_size,
-		 "No such configuration property: \"%s\"", name);
-
+	if(!streams_is_config_supported(name)) {
+		fprintf(stderr, "WARNING: Mapr-librdkafka does not support '%s' configuration property. Ignoring ...", name);
+		return RD_KAFKA_CONF_OK;
+	} else {
+		rd_snprintf(errstr, errstr_size,
+			"No such configuration property: \"%s\"", name);
+	}
 	return RD_KAFKA_CONF_UNKNOWN;
 }
 

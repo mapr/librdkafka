@@ -49,7 +49,7 @@ function checks {
 
     if [[ "$ENABLE_SSL" == "y" ]]; then
 	mkl_meta_set "libssl" "deb" "libssl-dev"
-	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
+	mkl_lib_check "libssl" disable CC "-lssl"
     fi
 
     if [[ "$ENABLE_SASL" == "y" ]]; then
