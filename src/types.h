@@ -37,10 +37,10 @@ typedef void (*streams_rebalance_cb) (
   void *cb_ctx);
 
 typedef void (*streams_commit_cb) (
-  int32_t err,
   streams_topic_partition_t *topic_partitions,
   int64_t *offsets,
   uint32_t topic_partitions_size,
+  int32_t err,
   void *cb_ctx);
 
 typedef void (*streams_producer_cb)(
