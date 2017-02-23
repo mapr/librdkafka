@@ -509,10 +509,10 @@ rd_kafka_commit0 (rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-static void streams_offset_commit_wrapper_cb (int32_t err,
-					      streams_topic_partition_t *tps,
+static void streams_offset_commit_wrapper_cb (streams_topic_partition_t *tps,
 					      int64_t *offsets,
 					      uint32_t nFeeds,
+					      int32_t err,
 					      void *ctx) {
 	streams_offset_commit_callback_ctx *wrapper_cb_ctx = (streams_offset_commit_callback_ctx *) ctx;
 	rd_kafka_t *rk = wrapper_cb_ctx->rk;
@@ -562,11 +562,11 @@ streams_commit_topics (rd_kafka_t *rk,
 					      (const int64_t*) cursor,
 					      tp_size);
 
-		streams_offset_commit_wrapper_cb ((int32_t)RD_KAFKA_RESP_ERR_NO_ERROR,
-						   streams_topics,
-						   cursor,
-						   tp_size,
-						   opaque_wrapper);
+		streams_offset_commit_wrapper_cb (streams_topics,
+                        cursor,
+                        tp_size,
+                        (int32_t)RD_KAFKA_RESP_ERR_NO_ERROR,
+                        opaque_wrapper);
 	}
 	return err;
 }
