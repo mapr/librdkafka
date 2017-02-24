@@ -953,6 +953,22 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 }
 
 
+int streams_topic_partition_available (rd_kafka_itopic_t *rkt, int32_t partition) {
+        if (partition < 0)
+                return 0;
+
+        int num_part = 0;
+        streams_producer_get_num_partitions (
+                        (const streams_producer_t)
+                        rkt->rkt_rk->streams_producer,
+                        rkt->rkt_topic->str, &num_part);
+
+        if (partition < num_part)
+                return 1;
+
+        return 0;
+}
+
 /**
  * Locks: rd_kafka_topic_*lock() must be held.
  */
@@ -965,7 +981,13 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
         rd_kafka_toppar_t *rktp;
         rd_kafka_broker_t *rkb;
 
-	s_rktp = rd_kafka_toppar_get(rd_kafka_topic_a2i(app_rkt),
+        rd_kafka_itopic_t *itopic =
+                  rd_kafka_topic_a2i(app_rkt);
+        if(is_streams_producer (itopic->rkt_rk)) {
+          return streams_topic_partition_available(itopic,
+                                            partition);
+	}
+	s_rktp = rd_kafka_toppar_get(itopic,
                                      partition, 0/*no ua-on-miss*/);
 	if (unlikely(!s_rktp))
 		return 0;
