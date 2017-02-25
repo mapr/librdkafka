@@ -1960,7 +1960,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");
 }
 
-void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *config) {
+void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, bool isSubscribe, streams_config_t *config) {
   //create default stream config.
   streams_config_create (config);
   //map and set librdkafka config to streams.
@@ -1991,7 +1991,7 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *c
   streams_config_set (*config, "message.max.bytes", size_str);
 
   /* Consumer configs*/
-  if (conf.group_id_str)
+  if (isSubscribe && conf.group_id_str)
     streams_config_set (*config, "group.id", conf.group_id_str);
 
   streams_config_set (*config, "enable.auto.commit",

@@ -1335,7 +1335,7 @@ static void streams_producer_wrapper_cb (int32_t err,
 void streams_producer_create_wrapper (rd_kafka_t *rk) {
 	//create streams config
 	streams_config_t config;
-  streams_kafka_mapped_streams_config_set (rk, &config);
+  streams_kafka_mapped_streams_config_set (rk, false, &config);
 
   //create streams producer
 	streams_producer_t producer;

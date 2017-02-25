@@ -278,6 +278,6 @@ struct rd_kafka_topic_conf_s {
 
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
-void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, streams_config_t *config);
+void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, bool isSubscribe, streams_config_t *config);
 
 bool is_funct_present(const char *funct);
