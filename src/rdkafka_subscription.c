@@ -143,10 +143,10 @@ static void streams_revoke_rebalance_wrapper_cb ( streams_topic_partition_t *top
 	//TODO: DO NOT DESTROY WRAPPER CTX here, same context is used till the end of life of consumer.
 };
 
-void streams_consumer_create_wrapper(rd_kafka_t *rk) {
+void streams_consumer_create_wrapper(rd_kafka_t *rk, bool isSubscribe) {
 	//create streams config
 	streams_config_t config;
-	streams_kafka_mapped_streams_config_set (rk, &config);
+	streams_kafka_mapped_streams_config_set (rk, isSubscribe, &config);
 	if (!(rk->rk_conf).group_id->str)
 		return;
 
@@ -339,7 +339,7 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
       }
     }
 		if(!is_streams_consumer(rk)) {
-			streams_consumer_create_wrapper (rk);
+			streams_consumer_create_wrapper (rk, true);
 		}
 
 		streams_consumer_callback_ctx *opaque_wrapper;
@@ -470,7 +470,7 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
       }
       //all streams topics
       if(!is_streams_consumer(rk)) {
-          streams_consumer_create_wrapper (rk);
+          streams_consumer_create_wrapper (rk, false);
       }
 
       err = streams_consumer_assign_partitions (rk->streams_consumer,
