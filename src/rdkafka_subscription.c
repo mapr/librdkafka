@@ -204,6 +204,7 @@ bool streams_check_regex_for_same_stream_and_combine (char **regex_topics,
           break;
       }
     }
+    totalLen++; // For the ending '\0' character.
     if (match) {
       out = malloc (totalLen * sizeof(char));
       sprintf (out, "%s:", temp_reg_stream);
@@ -291,38 +292,38 @@ rd_kafka_resp_err_t
 streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 																		const rd_kafka_topic_partition_list_t *topics,
 																		bool *is_kafka_subscribe) {
-	*is_kafka_subscribe = false;
-  char **streams_topics = rd_malloc(0);
-  char **regex_topics = rd_malloc(0);
-  char *regex = NULL;
-  int error = RD_KAFKA_RESP_ERR_NO_ERROR;
+    *is_kafka_subscribe = false;
+    char **streams_topics = rd_malloc(0);
+    char **regex_topics = rd_malloc(0);
+    char *regex = NULL;
+    int error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-  int streams_topic_count = 0;
-  int regex_topic_count = 0;
-  rd_kafka_topic_partition_list_t *updated_topics;
-  if(rk->rk_conf.streams_consumer_default_stream_name) {
-    streams_update_topic_list(rk,
-                              rk->rk_conf.streams_consumer_default_stream_name,
-                              topics, &updated_topics);
-  } else {
-    updated_topics = rd_kafka_topic_partition_list_copy (topics);
-  }
-  int topic_validity = streams_get_regex_topic_names(rk, updated_topics,
-        &streams_topics, &regex_topics,
-        &streams_topic_count,
-        &regex_topic_count);
+    int streams_topic_count = 0;
+    int regex_topic_count = 0;
+    rd_kafka_topic_partition_list_t *updated_topics;
+    if(rk->rk_conf.streams_consumer_default_stream_name) {
+        streams_update_topic_list(rk,
+                rk->rk_conf.streams_consumer_default_stream_name,
+                topics, &updated_topics);
+    } else {
+        updated_topics = rd_kafka_topic_partition_list_copy (topics);
+    }
+    int topic_validity = streams_get_regex_topic_names(rk, updated_topics,
+            &streams_topics, &regex_topics,
+            &streams_topic_count,
+            &regex_topic_count);
 
-	switch (topic_validity) {
+    switch (topic_validity) {
 
-	case MIX_TOPICS:
-    streams_topic_regex_list_free(streams_topics, streams_topic_count,
-                                  regex_topics, regex_topic_count);
-    return RD_KAFKA_RESP_ERR__INVALID_ARG;
+    case MIX_TOPICS:
+        streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                regex_topics, regex_topic_count);
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-	case STREAMS_TOPICS:
-    if (rk->kafka_consumer) {
-      streams_topic_regex_list_free(streams_topics, streams_topic_count,
-                                  regex_topics, regex_topic_count);
+    case STREAMS_TOPICS:
+        if (rk->kafka_consumer) {
+            streams_topic_regex_list_free(streams_topics, streams_topic_count,
+                    regex_topics, regex_topic_count);
 
       free(regex);
 			return RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -342,37 +343,37 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
 			streams_consumer_create_wrapper (rk, true);
 		}
 
-		streams_consumer_callback_ctx *opaque_wrapper;
-		size_t ctxlen = sizeof(*opaque_wrapper);
-		opaque_wrapper = rd_malloc(ctxlen);
-		opaque_wrapper->rk = rk;
-    if (streams_topic_count > 0) {
+        streams_consumer_callback_ctx *opaque_wrapper;
+        size_t ctxlen = sizeof(*opaque_wrapper);
+        opaque_wrapper = rd_malloc(ctxlen);
+        opaque_wrapper->rk = rk;
+        if (streams_topic_count > 0) {
 
-		  error = streams_consumer_subscribe_topics((const streams_consumer_t) rk->streams_consumer,
-              (const char**) streams_topics,
-              topics->cnt,
-              (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
-              (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
-              (void *)opaque_wrapper);
-    }
-    if (regex_topic_count > 0) {
-      if (regex) {
-        char *str;
-        char *blacklist;
-        streams_get_name_from_full_path(regex, strlen(regex), &str, NULL);
-        streams_get_topic_blacklist_for_stream (rk->rk_conf.topic_blacklist,
-                                                str, &blacklist);
+            error = streams_consumer_subscribe_topics((const streams_consumer_t) rk->streams_consumer,
+                    (const char**) streams_topics,
+                    topics->cnt,
+                    (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
+                    (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
+                    (void *)opaque_wrapper);
+        }
+        if (regex_topic_count > 0) {
+            if (regex) {
+                char *str;
+                char *blacklist;
+                streams_get_name_from_full_path(regex, strlen(regex), &str, NULL);
+                streams_get_topic_blacklist_for_stream (rk->rk_conf.topic_blacklist,
+                        str, &blacklist);
 
-        error = streams_consumer_subscribe_regex ((const streams_consumer_t) rk->streams_consumer,
-              (const char*) regex,
-              (const char*) blacklist,
-              (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
-              (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
-              (void *)opaque_wrapper);
-      }
-    }
-    if(error != RD_KAFKA_RESP_ERR_NO_ERROR)
-      error = streams_to_librdkafka_error_converter (error , RD_KAFKA_OP_SUBSCRIBE);
+                error = streams_consumer_subscribe_regex ((const streams_consumer_t) rk->streams_consumer,
+                        (const char*) regex,
+                        (const char*) blacklist,
+                        (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
+                        (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
+                        (void *)opaque_wrapper);
+            }
+        }
+        if(error != RD_KAFKA_RESP_ERR_NO_ERROR)
+            error = streams_to_librdkafka_error_converter (error , RD_KAFKA_OP_SUBSCRIBE);
 
     break;
 

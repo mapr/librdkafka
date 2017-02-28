@@ -1105,6 +1105,8 @@ int streams_get_regex_topic_names (rd_kafka_t *rk,
     if ((regex_topic_count!=0 && streams_topic_count!=0)||
         (streams_topic_count!=0 && kafka_topic_count!=0)) {
       //Both streams and kafka topic names provided
+      *streams_topics = temp_topics;
+      *regex_topics = temp_reg_topics;
       *regex_count    = regex_topic_count;
       *streams_count  = streams_topic_count;
       return MIX_TOPICS;
@@ -1263,7 +1265,7 @@ int streams_get_name_from_full_path (const char*fullPath, uint32_t pathSize,
   if(stream) {
     uint32_t streamLen = colonIdx;
     char *streamName;
-    streamName = (char *) malloc(sizeof (char) * (streamLen));
+    streamName = (char *) malloc(sizeof (char) * (streamLen + 1));
     memcpy( streamName, &fullPath[0], streamLen );
     streamName[streamLen] = '\0';
     *stream = streamName;
