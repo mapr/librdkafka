@@ -1277,6 +1277,7 @@ int streams_check_full_path_is_valid(const char *fullPath,
   if (streams_get_name_from_full_path( fullPath, pathSize, NULL, &topicName) == -1)
     return -1;
   int err = streams_check_topic_name_is_valid(topicName, strlen(topicName), isRegex);
+  free(topicName);
   if (err)
     return err;
 
@@ -1284,6 +1285,9 @@ int streams_check_full_path_is_valid(const char *fullPath,
 }
 /*
 * Utility function to get stream and topic name 
+* \note
+* \param[out] stream. Caller needs to free if SUCCESS(0) is returned.
+* \param[out] topic. Caller needs to free if SUCCESS(0) is returned.
 */
 int streams_get_name_from_full_path (const char*fullPath, uint32_t pathSize,
                                      char** stream, char **topic){

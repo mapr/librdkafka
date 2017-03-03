@@ -358,8 +358,8 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
         }
         if (regex_topic_count > 0) {
             if (regex) {
-                char *str;
-                char *blacklist;
+                char *str = NULL;
+                char *blacklist = NULL;
                 streams_get_name_from_full_path(regex, strlen(regex), &str, NULL);
                 streams_get_topic_blacklist_for_stream (rk->rk_conf.topic_blacklist,
                         str, &blacklist);
@@ -370,6 +370,8 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
                         (const streams_rebalance_cb) streams_assign_rebalance_wrapper_cb,
                         (const streams_rebalance_cb) streams_revoke_rebalance_wrapper_cb,
                         (void *)opaque_wrapper);
+                if (str)
+                    free(str);
             }
         }
         if(error != RD_KAFKA_RESP_ERR_NO_ERROR)
