@@ -685,6 +685,10 @@ typedef struct rd_kafka_message_s {
 				    *  - dr_msg_cb:
                                     *    msg_opaque from produce() call */
 	bool is_streams_message;
+
+	streams_consumer_record_t *_streams_consumer_record;  /**< Streams record
+	                                * associated with this message */
+
 } rd_kafka_message_t;
 
 

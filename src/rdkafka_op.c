@@ -90,14 +90,27 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 
 void streams_rd_kafka_op_destroy_wrapper(rd_kafka_op_t *rko){
 
-	if (rko->rko_payload && rko->rko_flags & RD_KAFKA_OP_F_FREE) {
-                if (rko->rko_free_cb)
-                        rko->rko_free_cb(rko->rko_payload);
-                else
-                      if (rko->rko_payload)
-			      rd_free(rko->rko_payload);
+    if (rko->rko_payload) {
+
+        if (rko->rko_flags & RD_KAFKA_OP_F_FREE) {
+            if (rko->rko_free_cb) {
+                rko->rko_free_cb(rko->rko_payload);
+            }
+            else {
+                rd_free(rko->rko_payload);
+            }
         }
-	rd_free (rko);
+
+        if (rko->rko_flags & RD_KAFKA_OP_STREAMS_CONSUME_FREE) {
+            // Since there will be atmost 1 message in stream record, call
+            //  destroy on stream record on message destory.
+            streams_consumer_record_destroy(
+                             rko->rko_rkmessage._streams_consumer_record);
+        }
+
+    }
+    rd_free (rko);
+
 }
 
 

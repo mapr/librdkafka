@@ -537,9 +537,6 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 		streams_producer_destroy(rk->streams_producer);
 	} else if (is_streams_consumer(rk)) {
 		streams_consumer_destroy(rk->streams_consumer);
-		if (rk->streams_consumer_records != NULL) {
-			rd_free (rk->streams_consumer_records);
-		}
 	}
 	rd_kafka_destroy_app(rk, 1);
 }
@@ -1110,8 +1107,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Initiate Streams components */
 	rk->streams_consumer = NULL;
 	rk->streams_producer = NULL;
-	rk->streams_consumer_records = NULL;
-	rk->streams_consumer_records_count = 0;
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);

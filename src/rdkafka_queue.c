@@ -266,6 +266,9 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
 	streams_consumer_record_get_message_count (record,
 						   &numMsgs);
 
+	// librdkafka only consumes 1 message from streams.
+	assert (numMsgs <= 1);
+
 	//Create basic topic object to be filled in rd_kafka_message_t
 	shptr_rd_kafka_itopic_t *s_rkt;
 	rd_kafka_topic_t *rkt;
@@ -291,10 +294,12 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
 	uint32_t j = 0;
 	for (j=0; j < numMsgs; j++) {
 
-		rd_kafka_message_t *rkm = rd_kafka_message_new();
 		rd_kafka_op_t *rko;
-		void *key, *payload;
+		void *key = NULL;
+		void *payload = NULL;
                 rko = rd_kafka_op_new (RD_KAFKA_OP_FETCH);
+		rd_kafka_message_t *rkm = &rko->rko_rkmessage;
+		rkm->_streams_consumer_record = NULL;
 		uint32_t key_len = 0;
 		uint32_t val_len = 0;
 
@@ -324,21 +329,21 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
 
 		  rkm->len = val_len;
 		  rkm->key_len = key_len;
-		  rkm->key = rd_malloc(rkm->key_len +1);
-		  rkm->payload = rd_malloc(rkm->len +1);
 		  if (rkm->key_len >0) {
-			  strncpy ((char*)rkm->key,(char *) key, rkm->key_len);
-			  ((char *)rkm->key)[rkm->key_len] = '\0';
+			  rkm->key = key;
 		    } else {
-			    rkm->key = key;
+			    assert (key == NULL);
+			    rkm->key = NULL;
 		    }
 		    if (payload) {
-			    strncpy ((char *)rkm->payload,(char *) payload, rkm->len);
-			    ((char *)rkm->payload)[rkm->len] = '\0';
+			    rkm->payload = payload;
 			    rkm->rkt = rkt;
 			    rkm->partition = partitionId;
 			    rkm->is_streams_message = true;
+			    assert (numMsgs == 1);
+			    rkm->_streams_consumer_record = record;
 			    rko->rko_rkmessage = *rkm;
+			    rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
 			    rko->rko_err = rkm->err;
 			    rko->rko_rkt = rkm->rkt;
 			    rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
@@ -365,13 +370,6 @@ rd_kafka_op_t *streams_rd_kafka_q_pop_wrapper (rd_kafka_t *rk,
 					       int32_t version) {
 
 	if (is_streams_consumer(rk) && (rkq->rkq_qlen == 0)) {
-		if (rk->streams_consumer_records != NULL) {
-			uint32_t k;
-			for (k = 0; k < rk->streams_consumer_records_count; k++) {
-				streams_consumer_record_destroy(rk->streams_consumer_records[k]);
-			}
-			rk->streams_consumer_records = NULL;
-		}
 
 		streams_consumer_record_t *record;
 		uint32_t numRecords = 0;
@@ -379,8 +377,9 @@ rd_kafka_op_t *streams_rd_kafka_q_pop_wrapper (rd_kafka_t *rk,
 				       (uint64_t) timeout_ms,
 				       &record,
 				       &numRecords);
-		rk->streams_consumer_records = record;
-		rk->streams_consumer_records_count = numRecords;
+		// Since there will be only 1 message per record and only one record,
+		//  call streams streams_consumer_record_destroy in message destroy.
+		assert (numRecords <= 1);
 		if (numRecords != 0) {
 			uint32_t i;
 			for (i = 0; i< numRecords; i++) {

@@ -39,12 +39,14 @@ typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
  *   - rd_kafka_op_t.rko_flags
  *   - rd_kafka_buf_t.rkbuf_flags
  */
-#define RD_KAFKA_OP_F_FREE        0x1  /* rd_free payload when done with it */
-#define RD_KAFKA_OP_F_FLASH       0x2  /* Internal: insert at head of queue */
-#define RD_KAFKA_OP_F_NO_RESPONSE 0x4  /* rkbuf: Not expecting a response */
-#define RD_KAFKA_OP_F_CRC         0x8  /* rkbuf: Perform CRC calculation */
-#define RD_KAFKA_OP_F_BLOCKING    0x10 /* rkbuf: blocking protocol request */
-#define RD_KAFKA_OP_F_REPROCESS   0x20 /* cgrp: Reprocess at a later time. */
+#define RD_KAFKA_OP_F_FREE                0x1  /* rd_free payload when done with it */
+#define RD_KAFKA_OP_F_FLASH               0x2  /* Internal: insert at head of queue */
+#define RD_KAFKA_OP_F_NO_RESPONSE         0x4  /* rkbuf: Not expecting a response */
+#define RD_KAFKA_OP_F_CRC                 0x8  /* rkbuf: Perform CRC calculation */
+#define RD_KAFKA_OP_F_BLOCKING            0x10 /* rkbuf: blocking protocol request */
+#define RD_KAFKA_OP_F_REPROCESS           0x20 /* cgrp: Reprocess at a later time. */
+#define RD_KAFKA_OP_STREAMS_CONSUME_FREE  0x40 /* The payload to be freed by streams */
+
 
 
 typedef enum {
