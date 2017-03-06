@@ -222,17 +222,16 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 
   bool add_str_name_to_topic = false;
   if (rk->rk_conf.streams_producer_default_stream_name) {
-    int new_topic_len = strlen(topic);
-    char new_topic_str[new_topic_len];
     if (topic[0] != '/') {
-       add_str_name_to_topic = true;
-       new_topic_len = strlen(topic) +
+       size_t new_topic_len = strlen(topic) +
                      1 + // ':'
                      strlen (rk->rk_conf.streams_producer_default_stream_name) +
                      1; //snprintf '\0'
+       char new_topic_str[new_topic_len];
        snprintf(new_topic_str, new_topic_len, "%s:%s",
                  rk->rk_conf.streams_producer_default_stream_name, topic);
        rkt->rkt_topic = rd_kafkap_str_new(new_topic_str, -1);
+       add_str_name_to_topic = true;
     }
   }
 
