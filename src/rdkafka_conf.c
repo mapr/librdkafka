@@ -36,6 +36,8 @@
 #include "rdkafka_int.h"
 #include "rdkafka_feature.h"
 
+static bool is_streams_compatible = false;
+
 struct rd_kafka_property {
 	rd_kafka_conf_scope_t scope;
 	const char *name;

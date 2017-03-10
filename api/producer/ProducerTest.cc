@@ -204,51 +204,42 @@ int ProducerTest::runProducerMixedTopicTest(char * strName, int type, int flag){
   snprintf(maprTopicName, sizeof(maprTopicName), "%s0:maprtopic",  strName);
   rd_kafka_topic_t *maprTopicObj = rd_kafka_topic_new (producer, maprTopicName,
                                             rd_kafka_topic_conf_dup(topicConf));
+
   //create kafka topic
   char kafkaTopicName[100] = "kafkatopic";
   rd_kafka_topic_t *kafkaTopicObj = rd_kafka_topic_new (producer, kafkaTopicName,
                                             rd_kafka_topic_conf_dup(topicConf));
 
-  char *key;
-  char *value;
-  switch (type) {
-  case 0: //mapr producer
-          key = strdup("maprProduceMaprTopicKey");
-          value = strdup("maprProducerMaprTopicValue");
-          err = rd_kafka_produce(maprTopicObj, 0, flag, value,
-                                strlen(value), key, strlen(key), NULL);
-          if(err) {
-            rd_kafka_topic_destroy(maprTopicObj);
-            rd_kafka_topic_destroy(kafkaTopicObj);
-            rd_kafka_destroy(producer);
-            return PRODUCER_SEND_FAILED;
-          }
-          key = strdup("maprProducerKafkaTopicKey");
-          value = strdup("maprProducerKafkaTopicValue");
-          err= rd_kafka_produce(kafkaTopicObj, 0, flag, value,
-                                strlen(value), key, strlen(key), NULL);
-          break;
-  case 1://kafka producer
-          key = strdup("kafkaProduceKafkaTopicKey");
-          value = strdup("kafkaProducerKafkaTopicValue");
-          err = rd_kafka_produce(kafkaTopicObj, 0, flag, value,
-                                strlen(value), key, strlen(key), NULL);
-          if(err) {
-            rd_kafka_topic_destroy(maprTopicObj);
-            rd_kafka_topic_destroy(kafkaTopicObj);
-            rd_kafka_destroy(producer);
-            return PRODUCER_SEND_FAILED;
-          }
-          key = strdup("kafkaProducerMaprTopicKey");
-          value = strdup("kafkaProducerMaprTopicValue");
-          err = rd_kafka_produce(maprTopicObj, 0, flag, value,
-                                strlen(value), key, strlen(key), NULL);
-          break;
-  default:
-        break;
-  }
+  // Creating a kafka topic for a streams producer is not allowed.
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG, rd_kafka_last_error());
+  EXPECT_EQ(EINVAL, errno);
 
   rd_kafka_topic_destroy(maprTopicObj);
+  rd_kafka_destroy(producer);
+
+  producer = NULL;
+  maprTopicObj = NULL;
+  conf = NULL;
+
+  conf = rd_kafka_conf_new();
+   //Create Producer
+  if (!(producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
+                                errstr, sizeof(errstr)))){
+    cerr << " Failed to create new producer\n" <<  errstr;
+    return PRODUCER_CREATE_FAILED;
+  }
+
+  kafkaTopicObj = rd_kafka_topic_new (producer, kafkaTopicName,
+                                      rd_kafka_topic_conf_dup(topicConf));
+
+
+  maprTopicObj = rd_kafka_topic_new (producer, maprTopicName,
+                                     rd_kafka_topic_conf_dup(topicConf));
+
+  // Creating a streams topic for a kafka producer is not allowed.
+  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG, rd_kafka_last_error());
+  EXPECT_EQ(EINVAL, errno);
+
   rd_kafka_topic_destroy(kafkaTopicObj);
   rd_kafka_destroy(producer);
   return err;

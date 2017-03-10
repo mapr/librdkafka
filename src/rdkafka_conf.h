@@ -45,7 +45,6 @@ typedef enum {
 } rd_kafka_offset_method_t;
 
 
-static bool is_streams_compatible = false;
 #define ASSERT_(condition, message) { if(!(condition)){ printf ("%s", message);abort();}}
 
 

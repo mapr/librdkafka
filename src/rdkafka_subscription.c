@@ -321,7 +321,7 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
     case STREAMS_TOPICS:
-        if (rk->kafka_consumer) {
+        if (rk->is_kafka_user) {
             streams_topic_regex_list_free(streams_topics, streams_topic_count,
                     regex_topics, regex_topic_count);
 
@@ -416,7 +416,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 	err = streams_rd_kafka_subscribe_wrapper (rk, topics, &is_kafka_subscribe);
 
   if (is_kafka_subscribe) {
-      rk->kafka_consumer = true;
+      rk->is_kafka_user = true;
 			rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
 			rd_kafka_op_payload_set(rko,
 															rd_kafka_topic_partition_list_copy(topics),
@@ -467,7 +467,7 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
   }
 
   if (streams_topic_count > 0 ) {
-      if (rk->kafka_consumer) {
+      if (rk->is_kafka_user) {
           streams_topic_partition_free (streams_tps, streams_topic_count);
           return RD_KAFKA_RESP_ERR__INVALID_ARG;
       }

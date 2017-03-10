@@ -147,8 +147,8 @@ struct rd_kafka_s {
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
-  bool kafka_producer;
-  bool kafka_consumer;
+  bool is_kafka_user;
+  bool is_streams_user;
 	streams_consumer_t streams_consumer;
 	streams_producer_t streams_producer;
 
@@ -207,6 +207,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk);
 int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 bool is_streams_consumer (rd_kafka_t *rk);
 bool is_streams_producer (rd_kafka_t *rk);
+bool is_streams_user (rd_kafka_t *rk);
 
 
 #include "rdkafka_topic.h"

@@ -108,7 +108,7 @@ void produce_mix_topic_test (char*strName, int type, int flag) {
 
     ASSERT_EQ(0, stream_create (strName, 1/*stream index*/,
                                  1/*Default Partitions*/));
-    EXPECT_EQ (-1, ProducerTest::runProducerMixedTopicTest(strName, type, flag));
+    EXPECT_EQ (0, ProducerTest::runProducerMixedTopicTest(strName, type, flag));
     EXPECT_EQ(0, stream_delete (strName, 1/*stream index*/));
 }
 

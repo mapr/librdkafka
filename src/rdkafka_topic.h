@@ -76,6 +76,17 @@ struct rd_kafka_itopic_s {
         shptr_rd_kafka_itopic_t *rkt_shptr_app; /* Application's topic_new() */
 
 	rd_kafka_topic_conf_t rkt_conf;
+
+	bool is_streams_topic;  /* Is this MapR streams topic */
+	int32_t num_partitions;  /* Number of partitions in this topic */
+	streams_topic_partition_t *streams_tp_array;/* Streams topic partition
+	                                              * array */
+	streams_topic_partition_t streams_tp_default;/* Streams topic partition for
+	                                              * INVALID_PARTITION_ID (-1) */
+	uint32_t ref_cnt; /* Ref cnt for number of references to streams
+	                   * topic partition objects */
+	mtx_t streams_mtx; /* Mtx protecting streams topic data structures */
+	cnd_t streams_cnd;
 };
 
 #define rd_kafka_topic_rdlock(rkt)     rwlock_rdlock(&(rkt)->rkt_lock)
@@ -149,6 +160,10 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
+
+// Streams specific methods.
+bool is_streams_topic (rd_kafka_itopic_t *irkt);
+
 bool streams_is_valid_topic_name (const char * topic_name, bool *isRegex);
 
 int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
@@ -173,4 +188,13 @@ void streams_populate_topic_partition_list (rd_kafka_t *rk,
 					    streams_topic_partition_t *topic_partitions,
 					    const int64_t *offsets,
 					    uint32_t topic_partition_size,
-					    rd_kafka_topic_partition_list_t *outList ) ;
+					    rd_kafka_topic_partition_list_t *outList );
+
+int
+streams_get_topic_partition(rd_kafka_itopic_t *irkt, int32_t partition,
+                            streams_topic_partition_t *tp);
+
+void
+streams_put_topic_partition(rd_kafka_itopic_t *irkt);
+
+int streams_check_and_init_topic(rd_kafka_itopic_t *irkt);

@@ -1102,8 +1102,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
-	rk->kafka_producer = false;
-	rk->kafka_consumer = false;
+	rk->is_kafka_user = false;
+	rk->is_streams_user = false;
 	/* Initiate Streams components */
 	rk->streams_consumer = NULL;
 	rk->streams_producer = NULL;
@@ -1249,12 +1249,14 @@ int streams_to_librdkafka_error_converter (int err, rd_kafka_op_type_t op_type) 
     case ENOENT: //Streams ENOENT
             if ((int)op_type == RD_KAFKA_OP_COMMITTED)
               return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+            if ((int)op_type == RD_KAFKA_OP_DR)
+              return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
             if ((int)op_type == RD_KAFKA_OP_POSITION)
               return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
     case EIO: //Streams EIO
               return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
     case E2BIG: //Streams E2BIG
-            return EMSGSIZE;
+            return RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
     case EINVAL: //Streams EINVAL
             if ((int)op_type == RD_KAFKA_OP_DR)
               return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
@@ -1266,71 +1268,106 @@ int streams_to_librdkafka_error_converter (int err, rd_kafka_op_type_t op_type) 
   return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/*
+ * TODO Compare kafka error handling behavior (cb / api return call) and
+ *      populate this accordingly.
+ */
+static bool handle_error_in_cb_path(int32_t err) {
+
+    if (err == E2BIG) {
+        return false;
+    }
+    return true;
+}
+
+static void streams_producer_handle_response_cb(int32_t err,
+                                             const void *key,
+                                             size_t keylen,
+                                             void *payload,
+                                             size_t len,
+                                             int partitionid,
+                                             int64_t offset,
+                                             void *ctx) {
+
+    assert (handle_error_in_cb_path(err));
+
+    streams_producer_callback_ctx *wrapper_cb_ctx =
+                                          (streams_producer_callback_ctx *) ctx;
+    rd_kafka_t *rk = wrapper_cb_ctx->rk;
+    rd_kafka_msg_t *rkm;
+    if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
+            (!rk->rk_conf.dr_err_only || err)) {
+        if (err)
+            err = streams_to_librdkafka_error_converter(err, RD_KAFKA_OP_DR);
+        if (wrapper_cb_ctx->topic != NULL) {
+            rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(wrapper_cb_ctx->topic);
+            streams_message_create (itopic,
+                                    partitionid,
+                                    wrapper_cb_ctx->msgflags,
+                                    (char *)payload,
+                                    len,
+                                    (const void *)key,
+                                    keylen,
+                                    wrapper_cb_ctx->msg_opaque,
+                                    (rd_kafka_resp_err_t) err,
+                                    &rkm);
+            rkm->rkm_offset = offset;
+        } else {
+            err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        }
+
+        rd_kafka_op_t *rko;
+        rko = rd_kafka_op_new (RD_KAFKA_OP_DR);
+        rko->rko_err = err;
+        rko->rko_rkt = wrapper_cb_ctx->topic;
+        rko->rko_rkm = rkm;
+        rd_kafka_msgq_init (&rko->rko_msgq);
+        rd_kafka_msgq_enq (&rko->rko_msgq, rkm);
+        rd_kafka_q_enq (&rk->rk_rep, rko);
+    } else {
+        if ( wrapper_cb_ctx->msgflags != 0) {
+            if(payload) rd_free ((char *)payload);
+            if(key) rd_free ((char *)key);
+        }
+    }
+    rd_free(wrapper_cb_ctx);
+}
+
 static void streams_producer_wrapper_cb (int32_t err,
-					streams_producer_record_t record,
-					int partitionid,
-					int64_t offset,
-					void *ctx) {
-	streams_producer_callback_ctx *wrapper_cb_ctx =
-                                (streams_producer_callback_ctx *) ctx;
-	rd_kafka_t *rk = wrapper_cb_ctx->rk;
+                    streams_producer_record_t record,
+                    int partitionid,
+                    int64_t offset,
+                    void *ctx) {
 
-	//check for configured callback for message produced.
-	rd_kafka_msg_t *rkm;
-	const void *str_produced = NULL;
-	const void *key = NULL;
-	uint32_t msglen, keylen;
-  if (record) {
-	streams_producer_record_get_value (record,
-						   &str_produced,
-						   &msglen);
-	streams_producer_record_get_key (record,
-						 &key,
-						 &keylen);
-  }
-	if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
-			(!rk->rk_conf.dr_err_only || err) && (err !=  E2BIG)) {
-    if (err)
-     err = streams_to_librdkafka_error_converter(err, RD_KAFKA_OP_DR);
-		if (wrapper_cb_ctx->topic != NULL) {
-			rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(wrapper_cb_ctx->topic);
-			streams_message_create (itopic,
-						partitionid,
-						wrapper_cb_ctx->msgflags,
-						(char *)str_produced,
-						msglen,
-						(const void *)key,
-						keylen,
-						wrapper_cb_ctx->msg_opaque,
-						(rd_kafka_resp_err_t) err,
-						&rkm);
-      rkm->rkm_offset = offset;
-		} else {
-			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
-		}
+    if (!handle_error_in_cb_path(err)) {
+        return;
+    }
 
-		rd_kafka_op_t *rko;
-		rko = rd_kafka_op_new (RD_KAFKA_OP_DR);
-		rko->rko_err = err;
-		rko->rko_rkt = wrapper_cb_ctx->topic;
-		rko->rko_rkm = rkm;
-		rd_kafka_msgq_init (&rko->rko_msgq);
-		rd_kafka_msgq_enq (&rko->rko_msgq, rkm);
-		rd_kafka_q_enq (&rk->rk_rep, rko);
-	} else {
-		if ( wrapper_cb_ctx->msgflags != 0) {
-		  if(str_produced) rd_free ((char *)str_produced);
-		  if(key) rd_free ((char *)key);
-	  }
-  }
-	if (record) streams_producer_record_destroy(record);
-	rd_free(wrapper_cb_ctx);
+    //check for configured callback for message produced.
+    const void *payload = NULL;
+    const void *key = NULL;
+    uint32_t msglen, keylen;
+    if (record) {
+        streams_producer_record_get_value (record,
+                &payload,
+                &msglen);
+        streams_producer_record_get_key (record,
+                &key,
+                &keylen);
+    }
+
+    streams_producer_handle_response_cb(err, key, keylen, payload, msglen,
+            partitionid, offset, ctx);
+
+    if (record) {
+        streams_producer_record_destroy(record);
+    }
 };
 
 void streams_producer_create_wrapper (rd_kafka_t *rk) {
 	//create streams config
 	streams_config_t config;
-  streams_kafka_mapped_streams_config_set (rk, false, &config);
+	streams_kafka_mapped_streams_config_set (rk, false, &config);
 
   //create streams producer
 	streams_producer_t producer;
@@ -1342,69 +1379,93 @@ void streams_producer_create_wrapper (rd_kafka_t *rk) {
 
 
 int streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
-				  int32_t partition,
-				  int msgflags,
-				  const void *key,
-				  size_t keylen,
-				  void *payload,
-				  size_t len,
-				  void *msg_opaque) {
-	//Create streams producer record
-	streams_topic_partition_t tp;
-  streams_topic_partition_create(irkt->rkt_topic->str,
-				       partition,
-				       &tp);
+				                   int32_t partition,
+				                   int msgflags,
+				                   const void *key,
+				                   size_t keylen,
+				                   void *payload,
+				                   size_t len,
+				                   void *msg_opaque) {
 
-  char *copyPayload;
-  char *copyKey;
-  //Copy payload
-  if (payload && (msgflags & RD_KAFKA_MSG_F_COPY)) {
-    /* Copy payload to space following the ..msg_t */
-    copyPayload =  malloc (sizeof (char) * len);
-    memcpy(copyPayload, payload, len);
-  } else {
-    /* Just point to the provided payload. */
-    copyPayload = payload;
-  }
-  if (keylen!= 0) {
-    copyKey =  malloc (sizeof (char) * keylen);
-    memcpy(copyKey, key, keylen);
-  } else {
-    copyKey = key;
-  }
-  int result = 0;
-	streams_producer_record_t record;
-	  //Create streams producer callback context
-	  //TODO: Create wrapper per topic partition instaed of per message, and reuse it.
-	  streams_producer_callback_ctx *opaque_wrapper;
-	  size_t ctxlen = sizeof(*opaque_wrapper);
-	  opaque_wrapper = rd_malloc(ctxlen);
-	  opaque_wrapper->rk = irkt->rkt_rk;
-	  opaque_wrapper->msg_opaque = msg_opaque;
-	  opaque_wrapper->topic = irkt->rkt_app_rkt;
-	  opaque_wrapper->msgflags = msgflags;
+    bool got_tp = false;
+    int result = 0;
+    //Create streams producer callback context
+    // TODO: Bug 26291. Remove opaque_wrapper.
+    streams_producer_callback_ctx *opaque_wrapper;
+    size_t ctxlen = sizeof(*opaque_wrapper);
+    opaque_wrapper = rd_malloc(ctxlen);
+    opaque_wrapper->rk = irkt->rkt_rk;
+    opaque_wrapper->msg_opaque = msg_opaque;
+    opaque_wrapper->topic = irkt->rkt_app_rkt;
+    opaque_wrapper->msgflags = msgflags;
+    char *copyPayload = NULL;
+    char *copyKey = NULL;
+    //Copy payload
+    if (payload && (msgflags & RD_KAFKA_MSG_F_COPY)) {
+        /* Copy payload to space following the ..msg_t */
+        copyPayload =  rd_malloc (sizeof (char) * len);
+        memcpy(copyPayload, payload, len);
+    } else {
+        /* Just point to the provided payload. */
+        copyPayload = payload;
+    }
+    if (keylen!= 0) {
+        copyKey =  rd_malloc (sizeof (char) * keylen);
+        memcpy(copyKey, key, keylen);
+    } else {
+        copyKey = key;
+    }
 
-  if (streams_producer_record_create(tp, (const char *)copyKey, keylen,
-				                       (void *)copyPayload, len, &record) == 0) {
-	  result = streams_producer_send ((const streams_producer_t)
-					    irkt->rkt_rk->streams_producer,
-					    (const streams_producer_record_t) record,
-					    (const streams_producer_cb) streams_producer_wrapper_cb,
-					      opaque_wrapper);
+    streams_topic_partition_t tp = NULL;
+    result =  streams_get_topic_partition(irkt, partition, &tp);
 
-    if (result == E2BIG ) {
-      result = streams_to_librdkafka_error_converter(result, RD_KAFKA_OP_DR);
-    } else if (result != 0) {
-      result = 0;
-    } else {}
+    if (unlikely(result != 0)) {
+        assert (tp == NULL);
+        result = streams_to_librdkafka_error_converter (result, RD_KAFKA_OP_DR);
+        goto error;
+    }
 
-  } else {
-    streams_producer_wrapper_cb (RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                NULL, partition, 0, opaque_wrapper);
-  }
+    got_tp = true;
 
-  streams_topic_partition_destroy(tp);
-	return result;
+    streams_producer_record_t record;
+    result = streams_producer_record_create(tp, (const char *)copyKey, keylen,
+                                            (void *)copyPayload, len, &record);
+
+    if (unlikely(result != 0)) {
+        result = RD_KAFKA_RESP_ERR__INVALID_ARG;
+        goto error;
+    }
+
+    result = streams_producer_send ((const streams_producer_t)
+            irkt->rkt_rk->streams_producer,
+            (const streams_producer_record_t) record,
+            (const streams_producer_cb) streams_producer_wrapper_cb,
+            opaque_wrapper);
+
+    if (unlikely(!handle_error_in_cb_path(result))) {
+        result = streams_to_librdkafka_error_converter(result, RD_KAFKA_OP_DR);
+        goto error;
+    }
+
+    // Success or errors handled in cb path.
+    result = 0;
+    goto out;
+
+  error:
+    // Clean up copyKey and copyPayload in case of error.
+    //  For RD_KAFKA_MSG_F_FREE, the buffers are not freed on error.
+    if (msgflags & RD_KAFKA_MSG_F_COPY) {
+        if (len)
+            rd_free(copyPayload);
+        if (keylen)
+            rd_free(copyKey);
+    }
+
+  out:
+    if (got_tp) {
+        streams_put_topic_partition(irkt);
+    }
+    return result;
 }
 
 /**
@@ -1437,45 +1498,51 @@ streams_run_partitioner (rd_kafka_topic_t *rkt, const void *key,
   return partition;
 }
 
+/*
+ * \note:
+ *    In case of error returned by this api and RD_KAFKA_MSG_F_FREE was
+ *     specified, then the memory associated with the payload is still
+ *     the application caller's responsibility.
+ */
 int streams_verify_and_send_helper (rd_kafka_topic_t *rkt, int32_t partition,
-                                     int msgflags, void *payload, size_t len,
-                                     const void *key, size_t keylen,
-                                     void *msg_opaque) {
- rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
- if (streams_is_valid_topic_name(itopic->rkt_topic->str, NULL)) {
-    if(itopic->rkt_rk->kafka_producer) {
-	    rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-      return -1;
-    }
-    if (!is_streams_producer(itopic->rkt_rk))
-      streams_producer_create_wrapper(itopic->rkt_rk);
-     /*
-     * TODO: Support partitioner callback.
-     */
+                                    int msgflags, void *payload, size_t len,
+                                    const void *key, size_t keylen,
+                                    void *msg_opaque) {
+
+    rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
+    assert (is_streams_topic(itopic));
+    assert (is_streams_producer(itopic->rkt_rk));
+    assert (!itopic->rkt_rk->is_kafka_user);
+
+    // TODO: Support partitioner callback.
     if (partition == RD_KAFKA_PARTITION_UA)
         partition = streams_run_partitioner (rkt, key, keylen, msg_opaque);
 
-    //Producing to streams
     int err = streams_producer_send_wrapper(itopic,
-                 partition,
-                 msgflags,
-                 key,
-                 keylen,
-                 payload,
-                 len,
-                 msg_opaque );
+            partition,
+            msgflags,
+            key,
+            keylen,
+            payload,
+            len,
+            msg_opaque );
 
-	    if ( err != 0 ){
-        rd_kafka_set_last_error (rd_kafka_errno2err(err), err);
+    // TODO: Standardize and use API.
+    if ( err != 0 ) {
+        /* Translate error codes to errnos. */
+        if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
+            rd_kafka_set_last_error(err, ESRCH);
+        else if (err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+            rd_kafka_set_last_error(err, ENOENT);
+        else if (err == RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE)
+            rd_kafka_set_last_error(err, EMSGSIZE);
+        else
+            rd_kafka_set_last_error(err, EINVAL); /* NOTREACHED */
         return -1;
-      } else {
+    } else {
         rd_kafka_set_last_error (0, 0);
         return 0;
-      }
-  }
-  //kafka topic name;
-  //TODO: Change this error- add new
-  return RD_KAFKA_RESP_ERR__FAIL;
+    }
 }
 
 /**
@@ -1483,47 +1550,47 @@ int streams_verify_and_send_helper (rd_kafka_topic_t *rkt, int32_t partition,
  * Locality: any application thread
  */
 int rd_kafka_produce (rd_kafka_topic_t *rkt,
-		      int32_t partition,
-		      int msgflags,
-		      void *payload,
-		      size_t len,
-		      const void *key,
-		      size_t keylen,
-		      void *msg_opaque) {
-        if(!rkt){
-                rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-                return -1;
-        }
-        rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
-	if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL){
-	  rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-    return -1;
-  }
-
-  if(itopic->rkt_rk->rk_conf.streams_producer_default_stream_name) {
-    return streams_verify_and_send_helper (rkt, partition, msgflags, payload,
-                                           len, key, keylen, msg_opaque );
-  } else {
-    int err = streams_verify_and_send_helper (rkt, partition, msgflags, payload,
-                                              len, key, keylen, msg_opaque );
-    if (err != RD_KAFKA_RESP_ERR__FAIL)
-      return err;
-
-		if (is_streams_producer(itopic->rkt_rk)) {
-      rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-      return -1;
+                      int32_t partition,
+                      int msgflags,
+                      void *payload,
+                      size_t len,
+                      const void *key,
+                      size_t keylen,
+                      void *msg_opaque) {
+    if(!rkt){
+        rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+        return -1;
     }
-		//producing to kafka
-    itopic->rkt_rk->kafka_producer = true;
-		return rd_kafka_msg_new(itopic,
-					partition,
-					msgflags,
-					payload,
-					len,
-					key,
-					keylen,
-					msg_opaque);
-  }
+
+    rd_kafka_itopic_t *itopic = rd_kafka_topic_a2i(rkt);
+    if(itopic==NULL || itopic->rkt_topic == NULL || itopic->rkt_topic->str == NULL){
+        rd_kafka_set_last_error (RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+        return -1;
+    }
+
+    if (is_streams_user(itopic->rkt_rk)) {
+        // Producing to streams.
+        assert (is_streams_topic(itopic));
+
+        if (!is_streams_producer(itopic->rkt_rk)) {
+            streams_producer_create_wrapper(itopic->rkt_rk);
+        }
+
+        return streams_verify_and_send_helper (rkt, partition, msgflags, payload,
+                len, key, keylen, msg_opaque );
+    } else {
+        // Producing to Kafka.
+        assert (itopic->rkt_rk->is_kafka_user == true);
+        return rd_kafka_msg_new(itopic,
+                partition,
+                msgflags,
+                payload,
+                len,
+                key,
+                keylen,
+                msg_opaque);
+
+    }
 }
 
 /**
@@ -1546,15 +1613,16 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk) {
 }
 
 bool is_streams_consumer(rd_kafka_t *rk) {
-	if (rk->streams_consumer != NULL)
-		return true;
-	return false;
+    return (rk->streams_consumer != NULL);
 }
 
 bool is_streams_producer(rd_kafka_t *rk) {
-	if (rk->streams_producer != NULL)
-		return true;
-	return false;
+    return (rk->streams_producer != NULL);
+}
+
+bool is_streams_user(rd_kafka_t *rk) {
+    return (rk->is_streams_user || is_streams_producer(rk) ||
+            is_streams_consumer(rk));
 }
 
 /**
@@ -1746,7 +1814,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 
 	if (partition == RD_KAFKA_PARTITION_UA)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
-  if( streams_is_valid_topic_name(rkt->rkt_topic->str, NULL)) {
+  if (is_streams_topic(rkt)) {
     err = streams_rd_kafka_seek_wrapper (rkt, partition, offset);
   } else {
 	rd_kafka_topic_rdlock(rkt);
@@ -1956,43 +2024,43 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	rd_ts_t ts_end;
 
 	if (timeout_ms == RD_POLL_NOWAIT)
-		ts_end = 0;
+	    ts_end = 0;
 	else if (timeout_ms == RD_POLL_INFINITE)
-		ts_end = INT64_MAX;
+	    ts_end = INT64_MAX;
 	else
-		ts_end = rd_clock() + timeout_ms * 1000;
+	    ts_end = rd_clock() + timeout_ms * 1000;
 
 	rd_kafka_yield_thread = 0;
-        while ((rko = streams_rd_kafka_q_pop_wrapper (rk, rkq, timeout_ms, 0))) {
-               if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
-                        /* Message was handled by callback. */
-                     if ((rko->rko_type == RD_KAFKA_OP_FETCH)
-                         && (is_streams_consumer(rk))){
-                             streams_rd_kafka_op_destroy_wrapper(rko);
-                     } else {
-                        rd_kafka_op_destroy(rko);
-                     }
-			if (unlikely(rd_kafka_yield_thread)) {
-				/* Callback called rd_kafka_yield(), we must
-				 * stop dispatching the queue and return. */
-				rko = NULL;
-				break;
-			}
+	while ((rko = streams_rd_kafka_q_pop_wrapper (rk, rkq, timeout_ms, 0))) {
+	    if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
+	        /* Message was handled by callback. */
+	        if ((rko->rko_type == RD_KAFKA_OP_FETCH)
+	                && (is_streams_consumer(rk))){
+	            streams_rd_kafka_op_destroy_wrapper(rko);
+	        } else {
+	            rd_kafka_op_destroy(rko);
+	        }
+	        if (unlikely(rd_kafka_yield_thread)) {
+	            /* Callback called rd_kafka_yield(), we must
+	             * stop dispatching the queue and return. */
+	            rko = NULL;
+	            break;
+	        }
 
-			if (timeout_ms > 0 && rd_clock() > ts_end) {
-				rko = NULL;
-				break;
-			}
-                        continue;
-                }
-                break;
-        }
+	        if (timeout_ms > 0 && rd_clock() > ts_end) {
+	            rko = NULL;
+	            break;
+	        }
+	        continue;
+	    }
+	    break;
+	}
 
 	if (!rko) {
-		/* Timeout reached with no op returned. */
-		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__TIMED_OUT,
-					ETIMEDOUT);
-		return NULL;
+	    /* Timeout reached with no op returned. */
+	    rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__TIMED_OUT,
+	            ETIMEDOUT);
+	    return NULL;
 	}
 
         rd_kafka_assert(rk,
@@ -2541,52 +2609,52 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	case RD_KAFKA_OP_DR:
 		/* Delivery report:
 		 * call application DR callback for each message. */
-		while ((rkm = TAILQ_FIRST(&rko->rko_msgq.rkmq_msgs))) {
-			TAILQ_REMOVE(&rko->rko_msgq.rkmq_msgs, rkm, rkm_link);
+	    while ((rkm = TAILQ_FIRST(&rko->rko_msgq.rkmq_msgs))) {
+	        TAILQ_REMOVE(&rko->rko_msgq.rkmq_msgs, rkm, rkm_link);
 
-			dcnt++;
+	        dcnt++;
 
-                        if (rk->rk_conf.dr_msg_cb) {
-                                rd_kafka_message_t rkmessage = {
-                                        .payload    = rkm->rkm_payload,
-                                        .len        = rkm->rkm_len,
-                                        .err        = rko->rko_err,
-                                        .offset     = rkm->rkm_offset,
-                                        .rkt        = rko->rko_rkt,
-                                        .partition  = rkm->rkm_partition,
-                                        ._private   = rkm->rkm_opaque,
-                                };
+	        if (rk->rk_conf.dr_msg_cb) {
+	            rd_kafka_message_t rkmessage = {
+	                    .payload    = rkm->rkm_payload,
+	                    .len        = rkm->rkm_len,
+	                    .err        = rko->rko_err,
+	                    .offset     = rkm->rkm_offset,
+	                    .rkt        = rko->rko_rkt,
+	                    .partition  = rkm->rkm_partition,
+	                    ._private   = rkm->rkm_opaque,
+	            };
 
-                                if (rkm->rkm_key &&
-                                    !RD_KAFKAP_BYTES_IS_NULL(rkm->rkm_key)) {
-                                        rkmessage.key =
-						(void *)rkm->rkm_key->data;
-                                        rkmessage.key_len =
-                                                RD_KAFKAP_BYTES_LEN(
-                                                        rkm->rkm_key);
-                                }
+	            if (rkm->rkm_key &&
+	                    !RD_KAFKAP_BYTES_IS_NULL(rkm->rkm_key)) {
+	                rkmessage.key =
+	                        (void *)rkm->rkm_key->data;
+	                rkmessage.key_len =
+	                        RD_KAFKAP_BYTES_LEN(
+	                                rkm->rkm_key);
+	            }
 
-                                rk->rk_conf.dr_msg_cb(rk, &rkmessage,
-                                                      rk->rk_conf.opaque);
+	            rk->rk_conf.dr_msg_cb(rk, &rkmessage,
+	                    rk->rk_conf.opaque);
 
-                        } else {
+	        } else {
 
-                                rk->rk_conf.dr_cb(rk,
-                                                  rkm->rkm_payload,
-                                                  rkm->rkm_len,
-                                                  rko->rko_err,
-                                                  rk->rk_conf.opaque,
-                                                  rkm->rkm_opaque);
-                        }
+	            rk->rk_conf.dr_cb(rk,
+	                    rkm->rkm_payload,
+	                    rkm->rkm_len,
+	                    rko->rko_err,
+	                    rk->rk_conf.opaque,
+	                    rkm->rkm_opaque);
+	        }
 
-			rd_kafka_msg_destroy(rk, rkm);
-		}
+	        rd_kafka_msg_destroy(rk, rkm);
+	    }
 
-		rd_kafka_msgq_init(&rko->rko_msgq);
+	    rd_kafka_msgq_init(&rko->rko_msgq);
 
-		if (!(dcnt % 1000))
-			rd_kafka_dbg(rk, MSG, "POLL",
-				     "Now %i messages delivered to app", dcnt);
+	    if (!(dcnt % 1000))
+	        rd_kafka_dbg(rk, MSG, "POLL",
+	                "Now %i messages delivered to app", dcnt);
 		break;
 
 	case RD_KAFKA_OP_THROTTLE:

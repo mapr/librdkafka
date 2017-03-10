@@ -115,12 +115,11 @@ int rd_kafka_q_purge0 (rd_kafka_q_t *rkq, int do_lock) {
                 mtx_unlock(&rkq->rkq_lock);
 
 	/* Destroy the ops */
-	bool is_streams_pc = is_streams_producer(rkq->rkq_rk) || is_streams_consumer (rkq->rkq_rk);
 	next = TAILQ_FIRST(&tmpq);
 	while ((rko = next)) {
 		next = TAILQ_NEXT(next, rko_link);
 
-		if (is_streams_pc)
+		if (is_streams_user(rkq->rkq_rk))
 			streams_rd_kafka_op_destroy_wrapper(rko);
 		else
 			rd_kafka_op_destroy(rko);

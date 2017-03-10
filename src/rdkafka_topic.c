@@ -78,17 +78,17 @@ static rd_kafka_topic_t *rd_kafka_topic_keep_app (rd_kafka_itopic_t *rkt) {
  */
 static void rd_kafka_topic_destroy_app (rd_kafka_topic_t *app_rkt) {
     rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
-        shptr_rd_kafka_itopic_t *s_rkt = NULL;
+    shptr_rd_kafka_itopic_t *s_rkt = NULL;
 
-        mtx_lock(&rkt->rkt_app_lock);
+    mtx_lock(&rkt->rkt_app_lock);
     rd_kafka_assert(NULL, rkt->rkt_app_refcnt > 0);
     rkt->rkt_app_refcnt--;
-        if (unlikely(rkt->rkt_app_refcnt == 0)) {
+    if (unlikely(rkt->rkt_app_refcnt == 0)) {
         rd_kafka_assert(NULL, rkt->rkt_app_rkt);
         s_rkt = rd_kafka_topic_a2s(app_rkt);
-                rkt->rkt_app_rkt = NULL;
+        rkt->rkt_app_rkt = NULL;
     }
-        mtx_unlock(&rkt->rkt_app_lock);
+    mtx_unlock(&rkt->rkt_app_lock);
 
     if (s_rkt) /* final app reference lost, destroy the shared ptr. */
         rd_kafka_topic_destroy0(s_rkt);
@@ -100,26 +100,31 @@ static void rd_kafka_topic_destroy_app (rd_kafka_topic_t *app_rkt) {
  */
 void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 
-	rd_kafka_assert(rkt->rkt_rk, rd_refcnt_get(&rkt->rkt_refcnt) == 0);
+    rd_kafka_assert(rkt->rkt_rk, rd_refcnt_get(&rkt->rkt_refcnt) == 0);
 
-	if (rkt->rkt_topic)
-	  rd_kafkap_str_destroy(rkt->rkt_topic);
+    if (rkt->rkt_topic)
+        rd_kafkap_str_destroy(rkt->rkt_topic);
 
-        rd_kafka_assert(rkt->rkt_rk, rd_list_empty(&rkt->rkt_desp));
-        rd_list_destroy(&rkt->rkt_desp, NULL);
+    rd_kafka_assert(rkt->rkt_rk, rd_list_empty(&rkt->rkt_desp));
+    rd_list_destroy(&rkt->rkt_desp, NULL);
 
-	rd_kafka_wrlock(rkt->rkt_rk);
-	TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
-	rkt->rkt_rk->rk_topic_cnt--;
-	rd_kafka_wrunlock(rkt->rkt_rk);
+    rd_kafka_wrlock(rkt->rkt_rk);
+    TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
+    rkt->rkt_rk->rk_topic_cnt--;
+    rd_kafka_wrunlock(rkt->rkt_rk);
 
-	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
+    rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
     mtx_destroy(&rkt->rkt_app_lock);
-	rwlock_destroy(&rkt->rkt_lock);
-        rd_refcnt_destroy(&rkt->rkt_refcnt);
+    rwlock_destroy(&rkt->rkt_lock);
+    rd_refcnt_destroy(&rkt->rkt_refcnt);
 
-	rd_free(rkt);
+    if(is_streams_topic(rkt)) {
+        // Destroy streams specific data-structures.
+        streams_destroy_topic(rkt);
+    }
+
+    rd_free(rkt);
 }
 
 /**
@@ -191,95 +196,108 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                                               rd_kafka_topic_conf_t *conf,
                                               int *existing,
                                               int do_lock) {
-	rd_kafka_itopic_t *rkt;
-        shptr_rd_kafka_itopic_t *s_rkt;
+    rd_kafka_itopic_t *rkt;
+    shptr_rd_kafka_itopic_t *s_rkt;
 
-	/* Verify configuration */
-	if (!topic) {
-		if (conf)
-			rd_kafka_topic_conf_destroy(conf);
-		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
-					EINVAL);
-		return NULL;
-	}
-
-	if (do_lock)
-                rd_kafka_wrlock(rk);
-	if ((s_rkt = rd_kafka_topic_find(rk, topic, 0/*no lock*/))) {
-                if (do_lock)
-                        rd_kafka_wrunlock(rk);
-		if (conf)
-			rd_kafka_topic_conf_destroy(conf);
-                if (existing)
-                        *existing = 1;
-		return s_rkt;
-        }
-
-        if (existing)
-                *existing = 0;
-
-	rkt = rd_calloc(1, sizeof(*rkt));
-
-  bool add_str_name_to_topic = false;
-  if (rk->rk_conf.streams_producer_default_stream_name) {
-    if (topic[0] != '/') {
-       size_t new_topic_len = strlen(topic) +
-                     1 + // ':'
-                     strlen (rk->rk_conf.streams_producer_default_stream_name) +
-                     1; //snprintf '\0'
-       char new_topic_str[new_topic_len];
-       snprintf(new_topic_str, new_topic_len, "%s:%s",
-                 rk->rk_conf.streams_producer_default_stream_name, topic);
-       rkt->rkt_topic = rd_kafkap_str_new(new_topic_str, -1);
-       add_str_name_to_topic = true;
+    /* Verify configuration */
+    if (!topic) {
+        if (conf)
+            rd_kafka_topic_conf_destroy(conf);
+        rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                EINVAL);
+        return NULL;
     }
-  }
 
-  if (!add_str_name_to_topic)
-	  rkt->rkt_topic     = rd_kafkap_str_new(topic, -1);
+    if (do_lock)
+        rd_kafka_wrlock(rk);
+    if ((s_rkt = rd_kafka_topic_find(rk, topic, 0/*no lock*/))) {
+        if (do_lock)
+            rd_kafka_wrunlock(rk);
+        if (conf)
+            rd_kafka_topic_conf_destroy(conf);
+        if (existing)
+            *existing = 1;
+        return s_rkt;
+    }
 
-  rkt->rkt_rk        = rk;
+    if (existing)
+        *existing = 0;
 
-	if (!conf) {
-                if (rk->rk_conf.topic_conf)
-                        conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
-                else
-                        conf = rd_kafka_topic_conf_new();
+    rkt = rd_calloc(1, sizeof(*rkt));
+
+    rkt->rkt_rk        = rk;
+
+    // Streams specific.
+    bool add_str_name_to_topic = false;
+    if (rk->rk_conf.streams_producer_default_stream_name) {
+        if (topic[0] != '/') {
+            size_t new_topic_len = strlen(topic) +
+                    1 + // ':'
+                    strlen (rk->rk_conf.streams_producer_default_stream_name) +
+                    1; //snprintf '\0'
+            char new_topic_str[new_topic_len];
+            snprintf(new_topic_str, new_topic_len, "%s:%s",
+                    rk->rk_conf.streams_producer_default_stream_name, topic);
+            rkt->rkt_topic = rd_kafkap_str_new(new_topic_str, -1);
+            add_str_name_to_topic = true;
         }
-	rkt->rkt_conf = *conf;
-	rd_free(conf); /* explicitly not rd_kafka_topic_destroy()
-                        * since we dont want to rd_free internal members,
-                        * just the placeholder. The internal members
-                        * were copied on the line above. */
+    }
 
-	/* Default partitioner: consistent_random */
-	if (!rkt->rkt_conf.partitioner)
-		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_consistent_random;
+    if (!add_str_name_to_topic)
+        rkt->rkt_topic     = rd_kafkap_str_new(topic, -1);
 
-	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
-		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
+    int err = streams_check_and_init_topic(rkt);
+    // Invalid topic<->producer combination is used.
+    if (err != 0 ) {
+        rd_kafkap_str_destroy(rkt->rkt_topic);
+        rd_free(rkt);
+        if (conf)
+            rd_kafka_topic_conf_destroy(conf);
+        rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                EINVAL);
+        return NULL;
+    }
 
-	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
-		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
+    if (!conf) {
+        if (rk->rk_conf.topic_conf)
+            conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
+        else
+            conf = rd_kafka_topic_conf_new();
+    }
+    rkt->rkt_conf = *conf;
+    rd_free(conf); /* explicitly not rd_kafka_topic_destroy()
+     * since we dont want to rd_free internal members,
+     * just the placeholder. The internal members
+     * were copied on the line above. */
 
-        rd_list_init(&rkt->rkt_desp, 16);
-        rd_refcnt_init(&rkt->rkt_refcnt, 0);
+    /* Default partitioner: consistent_random */
+    if (!rkt->rkt_conf.partitioner)
+        rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_consistent_random;
 
-        s_rkt = rd_kafka_topic_keep(rkt);
+    if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
+        rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
 
-	rwlock_init(&rkt->rkt_lock);
+    rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
+            RD_KAFKAP_STR_PR(rkt->rkt_topic));
+
+    rd_list_init(&rkt->rkt_desp, 16);
+    rd_refcnt_init(&rkt->rkt_refcnt, 0);
+
+    s_rkt = rd_kafka_topic_keep(rkt);
+
+    rwlock_init(&rkt->rkt_lock);
     mtx_init(&rkt->rkt_app_lock, mtx_plain);
 
-	/* Create unassigned partition */
-	rkt->rkt_ua = rd_kafka_toppar_new(rkt, RD_KAFKA_PARTITION_UA);
+    /* Create unassigned partition */
+    rkt->rkt_ua = rd_kafka_toppar_new(rkt, RD_KAFKA_PARTITION_UA);
 
-	TAILQ_INSERT_TAIL(&rk->rk_topics, rkt, rkt_link);
-	rk->rk_topic_cnt++;
+    TAILQ_INSERT_TAIL(&rk->rk_topics, rkt, rkt_link);
+    rk->rk_topic_cnt++;
 
-        if (do_lock)
-                rd_kafka_wrunlock(rk);
+    if (do_lock)
+        rd_kafka_wrunlock(rk);
 
-	return s_rkt;
+    return s_rkt;
 }
 
 /**
@@ -1047,6 +1065,14 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
         return rd_kafka_topic_a2i(app_rkt)->rkt_conf.opaque;
 }
 
+bool is_streams_topic (rd_kafka_itopic_t *irkt) {
+  if (!irkt) {
+    return false;
+  }
+  return irkt->is_streams_topic;
+}
+
+
 bool streams_is_valid_topic_name (const char * topic_name, bool *isRegex) {
   if(!topic_name)
     return false;
@@ -1324,4 +1350,200 @@ int streams_get_name_from_full_path (const char*fullPath, uint32_t pathSize,
     *topic = topicName;
   }
   return 0;
+}
+
+/*
+ * \brief Init streams_topic_partition_t data structures.
+ * \pre irkt->streams_mtx lock is held
+ * \post irkt->streams_mtx lock is held
+ * \return ENOENT if there are no partitions.
+ */
+static int streams_init_topic_partition_objects(rd_kafka_itopic_t *irkt) {
+    assert (irkt != NULL);
+    assert (irkt->streams_tp_array == NULL);
+    assert (irkt->streams_tp_default == NULL);
+
+    irkt->streams_tp_default = NULL;
+
+    streams_producer_get_num_partitions(irkt->rkt_rk->streams_producer,
+                                        irkt->rkt_topic->str,
+                                        &irkt->num_partitions);
+
+    if (irkt->num_partitions == 0) {
+        return ENOENT;
+    }
+
+    irkt->streams_tp_array = rd_calloc(irkt->num_partitions,
+                                       sizeof(streams_topic_partition_t));
+    return 0;
+}
+
+/*
+ * \brief Destroy the streams_topic_partition_t objects for topic.
+ * \pre irkt->streams_mtx lock is held
+ * \post irkt->streams_mtx lock is held
+ */
+static void streams_destroy_topic_partition_objects(rd_kafka_itopic_t *irkt) {
+
+    assert (irkt != NULL);
+
+    if ((irkt->streams_tp_default == NULL) &&
+        (irkt->streams_tp_array == NULL)) {
+        assert (irkt->ref_cnt == 0);
+        return;
+    }
+
+    while (irkt->ref_cnt > 0) {
+        cnd_wait(&irkt->streams_cnd, &irkt->streams_mtx);
+    }
+
+    if (irkt->streams_tp_array) {
+        int i = 0;
+        for (i = 0; i < irkt->num_partitions; i++) {
+            if (irkt->streams_tp_array[i]) {
+                streams_topic_partition_destroy(irkt->streams_tp_array[i]);
+            }
+        }
+        rd_free(irkt->streams_tp_array);
+        irkt->streams_tp_array = NULL;
+    }
+
+    if (irkt->streams_tp_default) {
+        streams_topic_partition_destroy(irkt->streams_tp_default);
+        irkt->streams_tp_default = NULL;
+    }
+}
+
+static void streams_init_topic(rd_kafka_itopic_t *irkt) {
+
+    assert (irkt != NULL);
+    irkt->is_streams_topic = true;
+    mtx_init(&irkt->streams_mtx, mtx_plain);
+    cnd_init(&irkt->streams_cnd);
+    irkt->ref_cnt = 0;
+    irkt->num_partitions = 0;
+    irkt->streams_tp_array = NULL;
+    irkt->streams_tp_default = NULL;
+}
+
+
+void streams_destroy_topic(rd_kafka_itopic_t *irkt) {
+    assert (irkt != NULL);
+    assert (is_streams_topic(irkt));
+    assert (is_streams_user(irkt->rkt_rk));
+
+    mtx_lock(&irkt->streams_mtx);
+    streams_destroy_topic_partition_objects(irkt);
+    mtx_unlock(&irkt->streams_mtx);
+
+    mtx_destroy(&irkt->streams_mtx);
+    cnd_destroy(&irkt->streams_cnd);
+}
+
+/*
+ * \brief Get a streams_topic_partition object for a given partition / topic.
+ * \param[in] topic
+ * \param[in] partition Partition number in the topic.
+ * \param[out] Pointer to stream partition topic object.
+ * \return Returns a streams_topic_partition_t object.
+ *         NULL if invalid input is provided.
+ * \note Caller should release the topic_partition using
+ *        streams_put_topic_partition.
+ */
+int
+streams_get_topic_partition(rd_kafka_itopic_t *irkt, int32_t partition,
+                            streams_topic_partition_t *tp) {
+
+    assert (*tp == NULL);
+    assert (irkt != NULL);
+    assert (irkt->is_streams_topic == true);
+    assert (is_streams_producer(irkt->rkt_rk));
+
+    int ret = 0;
+
+    mtx_lock(&irkt->streams_mtx);
+
+    if (unlikely((partition >= irkt->num_partitions) ||
+        (irkt->num_partitions == 0)) )  {
+        streams_destroy_topic_partition_objects(irkt);
+        ret = streams_init_topic_partition_objects(irkt);
+    }
+
+    if (ret != 0) {
+        goto out;
+    }
+
+    if (partition < INVALID_PARTITION_ID ||
+        partition >= irkt->num_partitions) {
+        ret = EINVAL;
+        goto out;
+    }
+
+    assert (irkt->ref_cnt >= 0);
+
+    irkt->ref_cnt++;
+
+    if (partition == INVALID_PARTITION_ID) {
+        if (irkt->streams_tp_default == NULL) {
+            streams_topic_partition_create(irkt->rkt_topic->str,
+                    INVALID_PARTITION_ID, &irkt->streams_tp_default);
+        }
+        *tp = irkt->streams_tp_default;
+    } else {
+        if (irkt->streams_tp_array[partition] == NULL) {
+            streams_topic_partition_create(irkt->rkt_topic->str,
+                    partition, &irkt->streams_tp_array[partition]);
+        }
+        *tp = irkt->streams_tp_array[partition];
+    }
+
+  out:
+    mtx_unlock(&irkt->streams_mtx);
+    return ret;
+}
+
+/*
+ * \brief Decrement the refcnt for topic partition objects.
+ */
+void
+streams_put_topic_partition(rd_kafka_itopic_t *irkt) {
+    assert (irkt != NULL);
+    mtx_lock(&irkt->streams_mtx);
+    assert (irkt->ref_cnt > 0);
+    irkt->ref_cnt--;
+    if (irkt->ref_cnt == 0) {
+        cnd_signal(&irkt->streams_cnd);
+    }
+    mtx_unlock(&irkt->streams_mtx);
+}
+
+/*
+ * \brief Check and init streams topic/producer.
+ * \return 0 is success.
+ *         EINVAL if invalid topic<->producer combination is used.
+ */
+int
+streams_check_and_init_topic(rd_kafka_itopic_t *rkt) {
+    // Streams specific.
+    int ret = 0;
+
+    if (streams_is_valid_topic_name(rkt->rkt_topic->str, NULL)) {
+        // kafka user using to streams topic format.
+        if (rkt->rkt_rk->is_kafka_user) {
+            ret = EINVAL;
+        } else {
+            streams_init_topic(rkt);
+            rkt->rkt_rk->is_streams_user = true;
+        }
+    } else {
+        // Streams user using kafka topic format.
+        if (is_streams_user(rkt->rkt_rk)) {
+            ret = EINVAL;
+        } else {
+            rkt->is_streams_topic = false;
+            rkt->rkt_rk->is_kafka_user = true;
+        }
+    }
+
+    return ret;
 }

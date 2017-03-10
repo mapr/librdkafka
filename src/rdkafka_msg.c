@@ -224,17 +224,17 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
     return 0;
   }
 
-  if (streams_is_valid_topic_name(rkt->rkt_topic->str, NULL)) {
-    if(rkt->rkt_rk->kafka_producer) {
-      return 0;
-    }
-    if (!is_streams_producer(rkt->rkt_rk))
-      streams_producer_create_wrapper(rkt->rkt_rk);
+  if (is_streams_user(rkt->rkt_rk)) {
 
-    if (partition == RD_KAFKA_PARTITION_UA)
-      partition = INVALID_PARTITION_ID;
+      assert (is_streams_topic(rkt));
 
-    for (i = 0 ; i < message_cnt ; i++) {
+      if (!is_streams_producer(rkt->rkt_rk))
+          streams_producer_create_wrapper(rkt->rkt_rk);
+
+      if (partition == RD_KAFKA_PARTITION_UA)
+          partition = INVALID_PARTITION_ID;
+
+      for (i = 0 ; i < message_cnt ; i++) {
       all_err = streams_producer_send_wrapper(rkt, partition, msgflags,
                                         rkmessages[i].key,
                                         rkmessages[i].key_len,
