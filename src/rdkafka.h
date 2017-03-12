@@ -100,8 +100,7 @@ typedef SSIZE_T ssize_t;
  *         for runtime checks of version use rd_kafka_version()
  */
 #define RD_KAFKA_VERSION  0x000901ff
-//TODO: Change to 5.2.1 once merged.
-#define STREAMS_MIN_VERSION "5.2.0.40984G"
+#define STREAMS_MIN_VERSION "5.2.1.42242.GA"
 
 /**
  * @brief Returns the librdkafka version as integer.
