@@ -208,8 +208,9 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 bool is_streams_consumer (rd_kafka_t *rk);
 bool is_streams_producer (rd_kafka_t *rk);
 bool is_streams_user (rd_kafka_t *rk);
-
-
+bool streams_get_list_groups (rd_kafka_t *rk, char *group, int timeout_ms,
+                        const struct rd_kafka_group_list **grplistp,
+                        rd_kafka_resp_err_t *error); 
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 

@@ -3189,17 +3189,8 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                       int timeout_ms) {
         if (!rk || !grplistp)
           return RD_KAFKA_RESP_ERR__INVALID_ARG;
-        struct rd_kafka_group_list *g_list;
-        if (is_streams_consumer (rk)) {
-            rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-            if (rk->rk_conf.streams_consumer_default_stream_name) {
-                err = streams_get_list_groups (rk, group,
-                                            &g_list, timeout_ms);
-                g_list->is_streams_list = true;
-                *grplistp = g_list;
-            } else {
-                err = RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
-            }
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        if (streams_get_list_groups (rk, group, timeout_ms, grplistp, &err))  {
             return err;
         }
 
@@ -3505,7 +3496,7 @@ streams_populate_group_member_info (struct rd_kafka_group_member_info *mi,
 }
 
 int streams_is_group_present (struct rd_kafka_group_list *list, int curr_count,
-                         char *group, uint32_t *index) {
+                         char *group, int *index) {
   if (!group)
     return -1;
 
@@ -3550,10 +3541,14 @@ streams_is_consumer_part_of_group (struct rd_kafka_group_info *groupInfo,
   return 0;
 }
 
-rd_kafka_resp_err_t
-streams_get_list_groups (rd_kafka_t *rk, char *group,
+bool
+streams_get_list_groups (rd_kafka_t *rk, char *group, int timeout_ms,
                         const struct rd_kafka_group_list **grplistp,
-                        int timeout_ms) {
+                        rd_kafka_resp_err_t *error) {
+
+  if (!rk->rk_conf.streams_consumer_default_stream_name) {
+      return false;
+  }
   uint32_t num_groups = 0;
   uint32_t assignment_size = 0;
   streams_assign_list_t assignVector;
@@ -3683,5 +3678,6 @@ streams_get_list_groups (rd_kafka_t *rk, char *group,
 
   streams_assign_info_destroy_all (assignVector);
   *grplistp = glist;
-  return RD_KAFKA_RESP_ERR_NO_ERROR;
+  *error = RD_KAFKA_RESP_ERR_NO_ERROR;
+  return true;
 } 
