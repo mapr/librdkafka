@@ -1063,7 +1063,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	if (!conf)
 		conf = rd_kafka_conf_new();
-
+        if (!conf) {
+           rd_snprintf(errstr, errstr_size, "Could not obtain valid config");
+           rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+           return NULL;
+        }
         /* Verify mandatory configuration */
         if (!conf->socket_cb) {
                 rd_snprintf(errstr, errstr_size,

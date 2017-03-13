@@ -1144,7 +1144,8 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
                                                    NULL, 0);
 	}
 }
-bool streams_version_check (char *buf1, char *buf2){
+
+bool streams_version_compare (char *buf1, char *buf2){
   bool ver_allowed = false;
   if (!buf1 || !buf2)
     return ver_allowed;
@@ -1170,25 +1171,46 @@ bool streams_version_check (char *buf1, char *buf2){
       break;
     }
   }
-  streams_mapr_build_version_destroy(buf1);
   return ver_allowed;
 }
+
+bool streams_version_check () {
+  bool isPresent = is_funct_present("streams_mapr_build_version_get");
+  bool err = true;
+  char errStr[512];
+  snprintf(errStr, 512, "minimum required version: %s",
+                          STREAMS_MIN_VERSION);
+  if(!isPresent)
+    goto verErr;
+
+  char *version = NULL;
+  streams_mapr_build_version_get(&version);
+
+  if (!version)
+    goto verErr;
+
+  if (!streams_version_compare (version, STREAMS_MIN_VERSION)) {
+    memset (errStr, 0, 512);
+    snprintf(errStr, 512, "libMapRClient.so version: %s\
+        minimum required version: %s",version, STREAMS_MIN_VERSION);
+    goto verErr;
+  } else {
+    goto end;
+  }
+
+  verErr:
+    err = false;
+    rd_kafka_log_print(NULL, LOG_ERR, "LIBRARY_MISMATCH", errStr);
+
+  end:
+    streams_mapr_build_version_destroy(version);
+    return err;
+}
+
 rd_kafka_conf_t *rd_kafka_conf_new (void) {
   if (!is_streams_compatible) {
-    bool isPresent = is_funct_present("streams_mapr_build_version_get");
-    char errStr[512];
-    snprintf(errStr, 512, "\nLibrary mismatch, minimum required version: %s\n",
-                          STREAMS_MIN_VERSION);
-    ASSERT_(isPresent, errStr);
-
-    char *version = NULL;
-    streams_mapr_build_version_get(&version);
-
-    ASSERT_(version, errStr);
-    memset (errStr, 0, 512);
-    snprintf(errStr, 512, "\nLibrary mismatch, libMaprClient.so version: %s\
-        minimum required version: %s\n",version, STREAMS_MIN_VERSION);
-    ASSERT_(streams_version_check (version, STREAMS_MIN_VERSION), errStr );
+    if (!streams_version_check ())
+      return NULL;
 
     is_streams_compatible = true;
   }

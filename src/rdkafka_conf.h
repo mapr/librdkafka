@@ -45,8 +45,6 @@ typedef enum {
 } rd_kafka_offset_method_t;
 
 
-#define ASSERT_(condition, message) { if(!(condition)){ printf ("%s", message);abort();}}
-
 
 /**
  * Optional configuration struct passed to rd_kafka_new*().
