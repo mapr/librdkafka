@@ -107,14 +107,10 @@ void streams_rd_kafka_op_destroy_wrapper(rd_kafka_op_t *rko){
             streams_consumer_record_destroy(
                              rko->rko_rkmessage._streams_consumer_record);
         }
-
     }
     rd_free (rko);
 
 }
-
-
-
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
