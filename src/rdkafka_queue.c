@@ -527,7 +527,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
 		handled += callback(rk, rko, cb_type, opaque);
 		rd_kafka_q_deq0(&localq, rko);
-		if ((rko->rko_type == RD_KAFKA_OP_DR) && (is_streams_producer(rk)))
+
+		if ((rko->rko_type == RD_KAFKA_OP_DR) && (is_streams_user(rk)))
 			streams_rd_kafka_op_destroy_wrapper(rko);
 		else
 			rd_kafka_op_destroy(rko);
