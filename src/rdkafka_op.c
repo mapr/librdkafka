@@ -108,8 +108,10 @@ void streams_rd_kafka_op_destroy_wrapper(rd_kafka_op_t *rko){
                              rko->rko_rkmessage._streams_consumer_record);
         }
     }
-    rd_free (rko);
 
+    if (rd_atomic32_sub(&rd_kafka_op_cnt, 1) < 0)
+        rd_kafka_assert(NULL, !*"rd_kafka_op_cnt < 0");
+    rd_free (rko);
 }
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
