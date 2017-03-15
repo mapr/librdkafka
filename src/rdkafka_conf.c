@@ -1203,7 +1203,7 @@ bool streams_version_check () {
     rd_kafka_log_print(NULL, LOG_ERR, "LIBRARY_MISMATCH", errStr);
 
   end:
-    streams_mapr_build_version_destroy(version);
+    if(version) streams_mapr_build_version_destroy(version);
     return err;
 }
 
