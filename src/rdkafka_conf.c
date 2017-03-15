@@ -2044,12 +2044,11 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, bool isSubscribe, s
 }
 
 bool is_funct_present(const char *funct) {
-  char *library = NULL; /*dlopen returns handle of main program if filename=NULL */
   char* dlerr;
 
   /* Library Handle */
   void* libHandle;
-  libHandle = dlopen(library, RTLD_NOW | RTLD_GLOBAL);
+  libHandle = dlopen(LIB_NAME/*library*/, RTLD_NOW | RTLD_GLOBAL);
   if (libHandle == NULL)
   {
     dlerr = dlerror();
