@@ -1175,15 +1175,15 @@ bool streams_version_compare (char *buf1, char *buf2){
 }
 
 bool streams_version_check () {
-  bool isPresent = is_funct_present("streams_mapr_build_version_get");
   bool err = true;
   char errStr[512];
+  char *version = NULL;
+  bool isPresent = is_funct_present("streams_mapr_build_version_get");
   snprintf(errStr, 512, "minimum required version: %s",
                           STREAMS_MIN_VERSION);
   if(!isPresent)
     goto verErr;
 
-  char *version = NULL;
   streams_mapr_build_version_get(&version);
 
   if (!version)
