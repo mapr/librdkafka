@@ -198,3 +198,4 @@ void
 streams_put_topic_partition(rd_kafka_itopic_t *irkt);
 
 int streams_check_and_init_topic(rd_kafka_itopic_t *irkt);
+void streams_destroy_topic(rd_kafka_itopic_t *irkt);
