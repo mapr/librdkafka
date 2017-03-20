@@ -1191,8 +1191,8 @@ bool streams_version_check () {
 
   if (!streams_version_compare (version, STREAMS_MIN_VERSION)) {
     memset (errStr, 0, 512);
-    snprintf(errStr, 512, "libMapRClient.so version: %s\
-        minimum required version: %s",version, STREAMS_MIN_VERSION);
+    snprintf(errStr, 512, " current version: %s minimum required version: %s",
+            version, STREAMS_MIN_VERSION);
     goto verErr;
   } else {
     goto end;
@@ -1200,7 +1200,7 @@ bool streams_version_check () {
 
   verErr:
     err = false;
-    rd_kafka_log_print(NULL, LOG_ERR, "LIBRARY_MISMATCH", errStr);
+    fprintf(stderr, "LIBRARY_MISMATCH: LibMapRClient.so %s", errStr);
 
   end:
     if(version) streams_mapr_build_version_destroy(version);
