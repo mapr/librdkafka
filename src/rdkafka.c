@@ -1336,7 +1336,7 @@ static void streams_producer_handle_response_cb(int32_t err,
     } else {
         assert (rko != NULL);
         assert (rko->rko_rkm != NULL);
-        rd_kafka_msg_destroy(itopic->rkt_rk, rko->rko_rkm);
+        streams_rd_kafka_msg_destroy(itopic->rkt_rk, rko->rko_rkm);
         streams_rd_kafka_op_destroy_wrapper(rko);
     }
 }
@@ -1463,7 +1463,7 @@ streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
          * flag since our contract says we don't free the payload on
         * failure */
         rko->rko_rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
-        rd_kafka_msg_destroy(irkt->rkt_rk, rko->rko_rkm);
+        streams_rd_kafka_msg_destroy(irkt->rkt_rk, rko->rko_rkm);
         streams_rd_kafka_op_destroy_wrapper(rko);
     }
 
