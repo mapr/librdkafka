@@ -77,6 +77,8 @@ static rd_kafka_topic_t *rd_kafka_topic_keep_app (rd_kafka_itopic_t *rkt) {
  * @brief drop rkt app reference
  */
 static void rd_kafka_topic_destroy_app (rd_kafka_topic_t *app_rkt) {
+    if(!app_rkt)
+      return;
     rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
     shptr_rd_kafka_itopic_t *s_rkt = NULL;
 
