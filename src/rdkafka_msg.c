@@ -245,8 +245,11 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                         rkmessages[i].len,
                                         rkmessages[i]._private);
 
-      if (!all_err)
+      if (!all_err) {
         good++;
+      } else {
+        rkmessages[i].err = all_err;
+      }
     }
     return good;
   } else {
