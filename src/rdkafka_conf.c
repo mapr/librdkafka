@@ -1159,17 +1159,23 @@ bool streams_version_compare (char *buf1, char *buf2){
   char *min_token = strtok_r(min_version, ".", &minPtr);
   char *curr_token = strtok_r(curr_version, ".", &currPtr);
   int count = 0;
+  ver_allowed = true;
   //Only compare Major, minor and revision in a version
   while (curr_token && min_token && (count < 3)) {
-    if (atoi(curr_token) >= atoi(min_token)) {
-      ver_allowed = true;
-      count ++;
-      curr_token = strtok_r(NULL, ".", &currPtr);
-      min_token = strtok_r(NULL, ".", &minPtr);
-    } else {
-      ver_allowed = false;
-      break;
+    long cur_val = strtol(curr_token, NULL, 10);
+    assert (errno == 0);
+    long min_val = strtol(min_token, NULL, 10);
+    assert (errno == 0);
+    if (cur_val > min_val) {
+        break;
     }
+    if (cur_val < min_val) {
+        ver_allowed = false;
+        break;
+    }
+    count ++;
+    curr_token = strtok_r(NULL, ".", &currPtr);
+    min_token = strtok_r(NULL, ".", &minPtr);
   }
   return ver_allowed;
 }
