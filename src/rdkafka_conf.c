@@ -1163,9 +1163,7 @@ bool streams_version_compare (char *buf1, char *buf2){
   //Only compare Major, minor and revision in a version
   while (curr_token && min_token && (count < 3)) {
     long cur_val = strtol(curr_token, NULL, 10);
-    assert (errno == 0);
     long min_val = strtol(min_token, NULL, 10);
-    assert (errno == 0);
     if (cur_val > min_val) {
         break;
     }
