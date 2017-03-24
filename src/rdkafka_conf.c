@@ -1448,6 +1448,9 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 
 
 rd_kafka_conf_t *rd_kafka_conf_dup (const rd_kafka_conf_t *conf) {
+
+    if (!conf) return NULL;
+
 	rd_kafka_conf_t *new = rd_kafka_conf_new();
 
 	rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf);
@@ -1996,7 +1999,7 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, bool isSubscribe, s
   /* Producer configs*/
   char t_ms_str[16];
   memset (t_ms_str, 0, sizeof(t_ms_str));
-  snprintf(t_ms_str, sizeof (t_ms_str), "%d", conf.metadata_refresh_fast_cnt);
+  snprintf(t_ms_str, sizeof (t_ms_str), "%d", conf.metadata_refresh_interval_ms);
   streams_config_set (*config, "metadata.max.age.ms", t_ms_str);
 
   if (conf.streams_producer_default_stream_name)
