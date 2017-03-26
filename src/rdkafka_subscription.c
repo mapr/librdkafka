@@ -266,25 +266,34 @@ void streams_get_topic_blacklist_for_stream (rd_kafka_pattern_list_t *blacklist,
     }
 }
 
-void streams_update_topic_list(rd_kafka_t *rk, char *default_str,
+void streams_update_topic_list(rd_kafka_t *rk,
                               const rd_kafka_topic_partition_list_t *topics,
-                              rd_kafka_topic_partition_list_t **updated_topics) {
+                              rd_kafka_topic_partition_list_t **updated_topics,
+                              bool *is_def_str_conf) {
   //copy the complete list to populate all the elements on the data structure
   int i;
   *updated_topics = rd_kafka_topic_partition_list_copy (topics);
-  for (i = 0 ; i < (*updated_topics)->cnt ; i++) {
-    char *curr_t_name =  (*updated_topics)->elems[i].topic;
-    if (curr_t_name[0] == '/')
-      continue;
+  *is_def_str_conf = true;
+  if (rk->rk_conf.streams_consumer_default_stream_name) {
+    if (!*updated_topics)
+      return;
+    for (i = 0 ; i < (*updated_topics)->cnt ; i++) {
+      char *curr_t_name =  (*updated_topics)->elems[i].topic;
+      if (curr_t_name[0] == '/')
+        continue;
 
-    int new_t_len = strlen (default_str) +
+      int new_t_len = strlen (rk->rk_conf.streams_consumer_default_stream_name) +
                 1 + // for ':'
                 strlen (curr_t_name) +
                 1; // for '\0'
 
-    char new_t_str[new_t_len];
-    snprintf(new_t_str, new_t_len, "%s:%s", default_str, curr_t_name);
-    (*updated_topics)->elems[i].topic = rd_strdup(new_t_str);
+      char new_t_str[new_t_len];
+      snprintf(new_t_str, new_t_len, "%s:%s",
+          rk->rk_conf.streams_consumer_default_stream_name, curr_t_name);
+      (*updated_topics)->elems[i].topic = rd_strdup(new_t_str);
+    }
+  } else {
+    *is_def_str_conf = true;
   }
 }
 
@@ -297,17 +306,12 @@ streams_rd_kafka_subscribe_wrapper (rd_kafka_t *rk,
     char **regex_topics = rd_malloc(0);
     char *regex = NULL;
     int error = RD_KAFKA_RESP_ERR_NO_ERROR;
-
+    bool is_def_str_conf = false;
     int streams_topic_count = 0;
     int regex_topic_count = 0;
     rd_kafka_topic_partition_list_t *updated_topics;
-    if(rk->rk_conf.streams_consumer_default_stream_name) {
-        streams_update_topic_list(rk,
-                rk->rk_conf.streams_consumer_default_stream_name,
-                topics, &updated_topics);
-    } else {
-        updated_topics = rd_kafka_topic_partition_list_copy (topics);
-    }
+    streams_update_topic_list(rk,
+                topics, &updated_topics, &is_def_str_conf);
     int topic_validity = streams_get_regex_topic_names(rk, updated_topics,
             &streams_topics, &regex_topics,
             &streams_topic_count,
@@ -405,6 +409,8 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 		    const rd_kafka_topic_partition_list_t *topics) {
   if(!rk || !topics)
      return RD_KAFKA_RESP_ERR__INVALID_ARG;
+  if (is_streams_user(rk) && !is_part_of_streams_consumer_group(rk))
+    return RD_KAFKA_RESP_ERR__CONFLICT;
   rd_kafka_resp_err_t err;
   rd_kafka_op_t *rko;
   rd_kafka_cgrp_t *rkcg;
@@ -433,23 +439,25 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
                                 const rd_kafka_topic_partition_list_t *topics,
                                 bool *is_kafka_assign) {
   *is_kafka_assign = false;
+  //rd_kafka_assign call on subscribed consumer should be a NO OP for streams
+  if (is_streams_user(rk) && is_part_of_streams_consumer_group(rk))
+    return RD_KAFKA_RESP_ERR_NO_ERROR;
+
   rd_kafka_resp_err_t err = 0;
   int streams_topic_count = 0;
   int kafka_topic_count = 0;
   int i;
-
+  bool is_def_str_conf = false;
   rd_kafka_topic_partition_list_t *updated_topics;
-  if(rk->rk_conf.streams_consumer_default_stream_name) {
-    streams_update_topic_list(rk,
-                              rk->rk_conf.streams_consumer_default_stream_name,
-                              topics, &updated_topics);
-  } else {
-    updated_topics = rd_kafka_topic_partition_list_copy (topics);
-  }
+  streams_update_topic_list(rk, topics, &updated_topics, &is_def_str_conf);
 
-  streams_topic_partition_t *streams_tps =
-           rd_malloc(updated_topics->cnt * sizeof(streams_topic_partition_t));
-  for (i=0; i < topics->cnt; i++) {
+  streams_topic_partition_t *streams_tps = NULL;
+  int t_count = 0;
+  if (updated_topics) {
+    streams_tps = rd_malloc(updated_topics->cnt * sizeof(streams_topic_partition_t));
+    t_count = updated_topics->cnt;
+  }
+  for (i=0; i < t_count; i++) {
     const char *topic_name =  (updated_topics->elems[i]).topic;
     if (streams_is_valid_topic_name(topic_name, NULL)) {
 
@@ -461,39 +469,39 @@ streams_rd_kafka_assign_wrapper (rd_kafka_t *rk,
     }
 
     if (streams_topic_count!=0 && kafka_topic_count!=0) {
-        streams_topic_partition_free (streams_tps, streams_topic_count);
-        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+      goto errOut;
     }
   }
+  rd_kafka_topic_partition_list_destroy (updated_topics);
 
-  if (streams_topic_count > 0 ) {
-      if (rk->is_kafka_user) {
-          streams_topic_partition_free (streams_tps, streams_topic_count);
-          return RD_KAFKA_RESP_ERR__INVALID_ARG;
-      }
+  if ((is_def_str_conf || streams_topic_count > 0) && (kafka_topic_count == 0)) {
+      if (rk->is_kafka_user)
+        goto errOut;
       //all streams topics
-      if(!is_streams_consumer(rk)) {
+      if(!is_streams_consumer(rk))
           streams_consumer_create_wrapper (rk, false);
-      }
 
       err = streams_consumer_assign_partitions (rk->streams_consumer,
                                         streams_tps, streams_topic_count);
       streams_topic_partition_free (streams_tps, streams_topic_count);
       return streams_to_librdkafka_error_converter (err , RD_KAFKA_OP_ASSIGN);
-  } else if (kafka_topic_count > 0 ) {
+  } else if ((kafka_topic_count > 0 || !is_def_str_conf) && (streams_topic_count == 0)) {
       streams_topic_partition_free (streams_tps, streams_topic_count);
       *is_kafka_assign = true;
       return 1;
   } else {
-    return RD_KAFKA_RESP_ERR__INVALID_ARG;
+      goto errOut;
   }
 
+  errOut:
+    streams_topic_partition_free (streams_tps, streams_topic_count);
+    return RD_KAFKA_RESP_ERR__INVALID_ARG;
 }
 
 rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *partitions) {
-        if (!rk || !partitions)
+        if (!rk)
           return RD_KAFKA_RESP_ERR__INVALID_ARG;
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
@@ -504,8 +512,7 @@ rd_kafka_assign (rd_kafka_t *rk,
 
         err = streams_rd_kafka_assign_wrapper (rk, partitions, &is_kafka_assign);
         if(is_kafka_assign) {
-          if ((rk->rk_conf.streams_consumer_default_stream_name)
-              || (is_streams_consumer(rk)))
+            if(is_streams_consumer(rk))
               return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
           rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);

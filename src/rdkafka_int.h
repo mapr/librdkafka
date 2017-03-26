@@ -208,6 +208,7 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 bool is_streams_consumer (rd_kafka_t *rk);
 bool is_streams_producer (rd_kafka_t *rk);
 bool is_streams_user (rd_kafka_t *rk);
+bool is_part_of_streams_consumer_group (rd_kafka_t *rk);
 
 
 #include "rdkafka_topic.h"

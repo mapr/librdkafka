@@ -437,6 +437,18 @@ streams_consumer_resume(const streams_consumer_t consumer,
 STREAMS_API int32_t
 streams_consumer_wakeup(const streams_consumer_t consumer);
 
+/** \brief Report if this consumer is part of consumer group.
+ * \param consumer [IN] : consumer handle
+ *
+ * \return 0 on success.  Error code on faliure.
+ *
+ * Report if this consumer is part of a consumer group or not. This API is added
+ * to identify if consumer is assigned or subscribed from librdkafka.
+ */
+STREAMS_API int32_t
+streams_consumer_is_part_of_consumer_group(const streams_consumer_t consumer,
+                                           bool *is_part_of_group);
+
 /** \brief Get the topic partition for this consumer record
   * \param consumer [IN] : consumer record
   * \param tp [OUT] : topic partition

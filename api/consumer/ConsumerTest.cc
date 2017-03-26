@@ -211,7 +211,7 @@ int ConsumerTest::runSubscribeTest (char *strName, int numStreams, int numTopics
             retVal = INVALID_ARGUMENT;
             break;
     }
-    rd_kafka_topic_partition_list_t *outList;
+    rd_kafka_topic_partition_list_t *outList = NULL;
     if (isAssign) {
       retVal = rd_kafka_assign(consumer, tp_list);
       rd_kafka_assignment(consumer, &outList);
@@ -905,7 +905,7 @@ rd_kafka_resp_err_t ConsumerTest::runRegexTest (char *stream1, char *stream2, in
 
   consumer = rd_kafka_new (RD_KAFKA_CONSUMER, confc, errstr, sizeof(errstr));
   rd_kafka_resp_err_t error = rd_kafka_subscribe(consumer, tp_list);
-  rd_kafka_topic_partition_list_t *outList = rd_kafka_topic_partition_list_new(0);
+  rd_kafka_topic_partition_list_t *outList = NULL;
   sleep (3);
   cout << "\nExpected subscription cnt: " << expectedSubCnt;
   if (type == 0) {
@@ -1089,5 +1089,165 @@ ConsumerTest::runConsumerListTest (char *strName, const char *groupid,
   rd_kafka_destroy(consumer3);
 
   return ret;
+}
+
+void unassigntest_rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                           rd_kafka_topic_partition_list_t *partitions,
+                           void *opaque) {
+  switch (err)
+  {
+    case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+        rd_kafka_assign (rk, partitions);
+        break;
+    case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+        rd_kafka_assign (rk, NULL);
+        break;
+    default:
+        break;
+  }
+}
+
+rd_kafka_resp_err_t
+ConsumerTest::runUnassignTest (char *strName, int nTopics, int npart){
+  Producer p;
+  uint64_t cb = 0;
+  int produceMsg = 1000;
+  int ntopics = nTopics;
+  int nparts = npart;
+  char *group1 = "MultiConGr";
+  char *clientid1 = "Consumer1";
+  char *clientid2 = "Consumer2";
+  //Produce 1000 messages per partition.
+  p.runTest (strName, 1, ntopics, nparts, produceMsg,
+             200, RD_KAFKA_MSG_F_COPY, false, 0, false, 15, &cb);
+
+  //create consumer1
+  rd_kafka_t *consumer1;
+  rd_kafka_conf_t *conf1 = rd_kafka_conf_new();
+  char defaultStr[strlen(strName) + 2];
+  sprintf(defaultStr, "%s0", strName);
+  char errstr[128];
+  rd_kafka_conf_set(conf1, "streams.consumer.default.stream", defaultStr,
+                    errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf1, "enable.auto.commit", "true", errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf1, "client.id", clientid1, errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf1, "group.id", group1, errstr, sizeof(errstr));
+ rd_kafka_conf_set_rebalance_cb(conf1, unassigntest_rebalance_cb);
+  rd_kafka_topic_conf_t *topic_conf1 = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf1, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf1, topic_conf1);
+  consumer1 = rd_kafka_new (RD_KAFKA_CONSUMER, conf1, errstr, sizeof(errstr));
+
+  rd_kafka_conf_t *conf2 = rd_kafka_conf_new ();
+  rd_kafka_conf_set(conf2, "streams.consumer.default.stream", defaultStr,
+                    errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf2, "enable.auto.commit", "true", errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf2, "client.id", clientid2, errstr, sizeof(errstr));
+  rd_kafka_conf_set(conf2, "group.id", group1, errstr, sizeof(errstr));
+ rd_kafka_conf_set_rebalance_cb(conf2, unassigntest_rebalance_cb);
+  rd_kafka_topic_conf_t *topic_conf2 = rd_kafka_topic_conf_new();
+  rd_kafka_topic_conf_set(topic_conf2, "auto.offset.reset", "earliest",
+                                             errstr, sizeof(errstr));
+  rd_kafka_conf_set_default_topic_conf(conf2, topic_conf2);
+
+  rd_kafka_topic_partition_list_t *tp_list1 =
+                                rd_kafka_topic_partition_list_new(0);
+  rd_kafka_topic_partition_list_t *tp_list2 =
+                                rd_kafka_topic_partition_list_new(0);
+  char currentName[100];
+  //populate tp list for consumer
+  for (int t = 0; t < ntopics; ++t) {
+    memset ( currentName, '\0', 100);
+    snprintf(currentName, sizeof (currentName),"%s0:topic%d",  strName, t);
+    rd_kafka_topic_partition_list_add(tp_list2, currentName, -1);
+    for (int p = 0; p < nparts; p+=2){
+       rd_kafka_topic_partition_list_add(tp_list1, currentName, p);
+    }
+  }
+
+  int err = 0;
+  err = rd_kafka_assign (consumer1, NULL);
+  assert (err == 0);
+  cout << "Assign topic partitions" << endl;
+  err = rd_kafka_assign (consumer1, tp_list1);
+  sleep (5);
+  assert (err == 0);
+  rd_kafka_topic_partition_list_t *out_list = NULL;
+  err = rd_kafka_assignment (consumer1, &out_list);
+  assert (err == 0);
+  assert (out_list->cnt == (nparts*ntopics /2));
+
+  rd_kafka_topic_partition_list_destroy (out_list);
+  cout << "Unassign partitions" << endl;
+  err = rd_kafka_assign (consumer1, NULL);
+  assert (err == 0);
+  out_list = NULL;
+  rd_kafka_assignment (consumer1, &out_list);
+  assert (out_list->cnt == 0);
+  rd_kafka_topic_partition_list_destroy (out_list);
+  cout << "Consecutive unassign partitions" << endl;
+  err = rd_kafka_assign (consumer1, NULL);
+  assert (err == 0);
+  out_list = NULL;
+  rd_kafka_assignment (consumer1, &out_list);
+  assert (out_list->cnt == 0);
+  rd_kafka_topic_partition_list_destroy (out_list);
+  out_list = NULL;
+  cout << "Subscribe after unassign";
+  err = rd_kafka_subscribe (consumer1, tp_list2);
+  assert (err == RD_KAFKA_RESP_ERR__CONFLICT);
+  cout << " failed as expected" << endl;
+  rd_kafka_assignment (consumer1, &out_list);
+  assert (out_list->cnt == 0);
+  rd_kafka_topic_partition_list_destroy (out_list);
+
+  out_list= NULL;
+  err = rd_kafka_assign (consumer1, tp_list1);
+  assert (err == 0);
+  rd_kafka_assignment (consumer1, &out_list);
+  assert (out_list->cnt == (nparts*ntopics /2));
+  rd_kafka_topic_partition_list_destroy (out_list);
+  rd_kafka_consumer_close (consumer1);
+  rd_kafka_destroy (consumer1);
+
+  consumer1 = rd_kafka_new (RD_KAFKA_CONSUMER, conf2, errstr, sizeof(errstr));
+
+  cout << "Subscribe topic partitions" << endl;
+  err = rd_kafka_subscribe (consumer1, tp_list2);
+  sleep (5);
+  assert (err == 0);
+  out_list =  NULL;
+  err = rd_kafka_assignment (consumer1, &out_list);
+  assert (err == 0);
+  assert (out_list->cnt == (nparts*ntopics));
+  rd_kafka_topic_partition_list_destroy (out_list);
+
+  cout << "Assign after subscribe ";
+  err = rd_kafka_assign (consumer1, tp_list1);
+  assert (err == 0);
+  out_list= NULL;
+  err = rd_kafka_assignment (consumer1, &out_list);
+  assert (err == 0);
+  assert (out_list->cnt == (nparts*ntopics));
+  cout << "NO-OP as expected" << endl;
+  rd_kafka_topic_partition_list_destroy (out_list);
+
+  cout << "Assign with NULL partition after subscribe ";
+  err = rd_kafka_assign (consumer1, NULL);
+  assert (err == 0);
+  out_list = NULL;
+  err = rd_kafka_assignment (consumer1, &out_list);
+  assert (err == 0);
+  assert (out_list->cnt == (nparts*ntopics));
+  cout << "NO-OP as expected" << endl;
+
+  rd_kafka_topic_partition_list_destroy (out_list);
+  rd_kafka_topic_partition_list_destroy (tp_list1);
+  rd_kafka_topic_partition_list_destroy (tp_list2);
+  rd_kafka_consumer_close (consumer1);
+  rd_kafka_destroy (consumer1);
+
+  return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 

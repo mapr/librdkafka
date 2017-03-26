@@ -39,6 +39,7 @@ char *STREAM_UNSUBSCRIBE = "/gtest-ConsumerUnsubscribe";
 char *STREAM_CLOSE = "/gtest-ConsumerClose";
 char *STREAM_COMBINATION = "/gtest-ConsumerCombination";
 char *STREAM_CONSUMER_GR_LIST = "/gtest-consumerGrListTest";
+char *STREAM_UNASSIGN = "/gtest-ConsumerNullAssignTest";
 
 class SubscribeTest: public testing::Test {
 
@@ -353,7 +354,7 @@ TEST_F(SubscribeTest, kafkaConsumerInvalidGroupAssignTest) {
                                       true, NULL));
 }
 TEST_F(SubscribeTest, maprConsumerMaprTopicAssignTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR__INVALID_ARG, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
                                                      1, 0, "ConsumerTest", true, NULL));
 }
 TEST_F(SubscribeTest, DISABLED_maprConsumerKafkaTopicAssignTest) {
@@ -399,7 +400,7 @@ TEST(ConsumerTest, DISABLED_consumerPollLargeSizeMsgTest) {
                              "consumerPollMediumMsgTestGr", true, true, false );
 }
 TEST(ConsumerTest, consumerPollVerifyOrderTest) {
-  consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200, 
+  consumer_poll_test_case (STREAM_POLL, 4, 2, 2, 10000, 200,
                            RD_KAFKA_MSG_F_COPY, true, 0, false, 30,
                            "consumerPollVerifyOrderTestGr", true, true, false );
 }
@@ -523,6 +524,16 @@ TEST (ConsumerTest, getAllConsumerGroupListTest) {
 
 TEST (ConsumerTest, getConsumerGroupInfoTest) {
   consumer_gr_list_test_case (STREAM_CONSUMER_GR_LIST, "singleConGr");
+}
+/*-----------------------------------------------*/
+/*Consumer unassign test*/
+/*-----------------------------------------------*/
+
+TEST (ConsumerTest, nullAssignTest) {
+  ASSERT_EQ (0, stream_create(STREAM_UNASSIGN, 1, 10));
+  ConsumerTest::runUnassignTest (STREAM_UNASSIGN, 2/*num of topics*/,
+                                10/*num of patitions*/);
+  ASSERT_EQ (0, stream_delete(STREAM_UNASSIGN, 1));
 }
 
 int main (int argc, char **argv) {

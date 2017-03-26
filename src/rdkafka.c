@@ -1635,6 +1635,13 @@ bool is_streams_user(rd_kafka_t *rk) {
             is_streams_consumer(rk));
 }
 
+bool is_part_of_streams_consumer_group(rd_kafka_t *rk) {
+  bool is_part_of_group = false;
+  streams_consumer_is_part_of_consumer_group (rk->streams_consumer,
+                                              &is_part_of_group);
+
+  return is_part_of_group;
+}
 /**
  * rktp fetch is split up in these parts:
  *   * application side:
