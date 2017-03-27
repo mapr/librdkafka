@@ -252,115 +252,116 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
 					 rd_kafka_q_t *rkq,
 					 streams_consumer_record_t record,
 					 int32_t ver) {
-	streams_topic_partition_t tp;
-	streams_consumer_record_get_topic_partition (record,
-						     &tp);
-	char *topic_name;
-	streams_topic_partition_get_topic_name (tp,
-						&topic_name);
-	int32_t partitionId = RD_KAFKA_PARTITION_UA;
-	streams_topic_partition_get_partition_id (tp,
-						  &partitionId);
-	uint32_t numMsgs = 0;
-	streams_consumer_record_get_message_count (record,
-						   &numMsgs);
+    streams_topic_partition_t tp;
+    streams_consumer_record_get_topic_partition (record,
+            &tp);
+    char *topic_name;
+    streams_topic_partition_get_topic_name (tp,
+            &topic_name);
+    int32_t partitionId = RD_KAFKA_PARTITION_UA;
+    streams_topic_partition_get_partition_id (tp,
+            &partitionId);
+    uint32_t numMsgs = 0;
+    streams_consumer_record_get_message_count (record,
+            &numMsgs);
 
-	// librdkafka only consumes 1 message from streams.
-	assert (numMsgs <= 1);
+    // librdkafka only consumes 1 message from streams.
+    assert (numMsgs <= 1);
 
-	//Create basic topic object to be filled in rd_kafka_message_t
-	shptr_rd_kafka_itopic_t *s_rkt;
-	rd_kafka_topic_t *rkt;
-	rd_kafka_wrlock (rk);
-	/* Find or create topic */
-	if (unlikely(!(s_rkt = rd_kafka_topic_find(rk,
-						   topic_name,
-						   0/*no-lock*/)))) {
-		s_rkt = rd_kafka_topic_new0(rk,
-					    topic_name,
-					    NULL,
-					    NULL,
-					    0/*no-lock*/);
-		if (!s_rkt) {
-			rd_kafka_wrunlock(rk);
-			rkt = NULL;
-		}
-	}
-
-	rd_kafka_wrunlock (rk);
-        rkt = rd_kafka_topic_s2a(s_rkt);
-
-	uint32_t j = 0;
-	for (j=0; j < numMsgs; j++) {
-
-		rd_kafka_op_t *rko;
-		void *key = NULL;
-		void *payload = NULL;
-                rko = rd_kafka_op_new (RD_KAFKA_OP_FETCH);
-		rd_kafka_message_t *rkm = &rko->rko_rkmessage;
-		rkm->_streams_consumer_record = NULL;
-		uint32_t key_len = 0;
-		uint32_t val_len = 0;
-
-    streams_msg_get_offset (record,
-                  j,
-                  &(rkm->offset));
-    if (rkm->offset == 0) {
-      rkm->err = RD_KAFKA_RESP_ERR__PARTITION_EOF;
-      rkm->partition = partitionId;
-      rko->rko_rkmessage = *rkm;
-      rko->rko_err = rkm->err;
-      rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
-      rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
-    } else {
-      streams_msg_get_value (record,
-				       j,
-				       &(payload),
-				       &val_len);
-	    if (val_len < (uint32_t) rk->rk_conf.recv_max_msg_size) {
-        streams_msg_get_key (record,
-				       j,
-				       &(key),
-				       &key_len);
-		    streams_msg_get_timestamp (record,
-					   j,
-					     &(rko->rko_timestamp));
-
-		  rkm->len = val_len;
-		  rkm->key_len = key_len;
-		  if (rkm->key_len >0) {
-			  rkm->key = key;
-		    } else {
-			    assert (key == NULL);
-			    rkm->key = NULL;
-		    }
-		    if (payload) {
-			    rkm->payload = payload;
-			    rkm->rkt = rkt;
-			    rkm->partition = partitionId;
-			    rkm->is_streams_message = true;
-			    assert (numMsgs == 1);
-			    rkm->_streams_consumer_record = record;
-			    rko->rko_rkmessage = *rkm;
-			    rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
-			    rko->rko_err = rkm->err;
-			    rko->rko_rkt = rkm->rkt;
-			    rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
-			    rko->rko_version = ver;
-			    rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
-		    }
-      } else {
-        //set error_cb
-        char errstr[512];
-        rd_snprintf(errstr, sizeof(errstr),
-                   "Invalid message size %"PRIu32" (0..%i): "
-                   "increase receive.message.max.bytes",
-                   val_len, rk->rk_conf.recv_max_msg_size);
-
-        rd_kafka_op_err (rk, RD_KAFKA_RESP_ERR__BAD_MSG, "%s", errstr);
-      }
+    //Create basic topic object to be filled in rd_kafka_message_t
+    shptr_rd_kafka_itopic_t *s_rkt;
+    rd_kafka_topic_t *rkt;
+    rd_kafka_wrlock (rk);
+    /* Find or create topic */
+    if (unlikely(!(s_rkt = rd_kafka_topic_find(rk,
+            topic_name,
+            0/*no-lock*/)))) {
+        s_rkt = rd_kafka_topic_new0(rk,
+                topic_name,
+                NULL,
+                NULL,
+                0/*no-lock*/);
+        if (!s_rkt) {
+            rd_kafka_wrunlock(rk);
+            rkt = NULL;
+        }
     }
-  }
+
+    rd_kafka_wrunlock (rk);
+    rkt = rd_kafka_topic_s2a(s_rkt);
+
+    uint32_t j = 0;
+    for (j=0; j < numMsgs; j++) {
+
+        rd_kafka_op_t *rko;
+        void *key = NULL;
+        void *payload = NULL;
+        rko = rd_kafka_op_new (RD_KAFKA_OP_FETCH);
+        rd_kafka_message_t *rkm = &rko->rko_rkmessage;
+        rkm->_streams_consumer_record = record;
+        rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
+        uint32_t key_len = 0;
+        uint32_t val_len = 0;
+
+        streams_msg_get_offset (record,
+                j,
+                &(rkm->offset));
+        if (rkm->offset == 0) {
+            rkm->err = RD_KAFKA_RESP_ERR__PARTITION_EOF;
+            rkm->partition = partitionId;
+            rko->rko_rkmessage = *rkm;
+            rko->rko_err = rkm->err;
+            rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+            rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
+        } else {
+            streams_msg_get_value (record,
+                    j,
+                    &(payload),
+                    &val_len);
+            if (val_len < (uint32_t) rk->rk_conf.recv_max_msg_size) {
+                streams_msg_get_key (record,
+                        j,
+                        &(key),
+                        &key_len);
+                streams_msg_get_timestamp (record,
+                        j,
+                        &(rko->rko_timestamp));
+
+                rkm->len = val_len;
+                rkm->key_len = key_len;
+                if (rkm->key_len >0) {
+                    rkm->key = key;
+                } else {
+                    assert (key == NULL);
+                    rkm->key = NULL;
+                }
+                if (payload) {
+                    rkm->payload = payload;
+                    rkm->rkt = rkt;
+                    rkm->partition = partitionId;
+                    rkm->is_streams_message = true;
+                    assert (numMsgs == 1);
+                    rko->rko_rkmessage = *rkm;
+                    rko->rko_err = rkm->err;
+                    rko->rko_rkt = rkm->rkt;
+                    rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+                    rko->rko_version = ver;
+                    rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
+                }
+            } else {
+                rd_kafka_op_destroy(rko);
+                streams_consumer_record_destroy(record);
+                //set error_cb
+                char errstr[512];
+                rd_snprintf(errstr, sizeof(errstr),
+                        "Invalid message size %"PRIu32" (0..%i): "
+                        "increase receive.message.max.bytes",
+                        val_len, rk->rk_conf.recv_max_msg_size);
+
+                rd_kafka_op_err (rk, RD_KAFKA_RESP_ERR__BAD_MSG, "%s", errstr);
+            }
+        }
+    }
 }
 
 rd_kafka_op_t *streams_rd_kafka_q_pop_wrapper (rd_kafka_t *rk,
