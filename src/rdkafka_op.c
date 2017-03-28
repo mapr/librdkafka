@@ -100,13 +100,13 @@ void streams_rd_kafka_op_destroy_wrapper(rd_kafka_op_t *rko){
                 rd_free(rko->rko_payload);
             }
         }
+    }
 
-        if (rko->rko_flags & RD_KAFKA_OP_STREAMS_CONSUME_FREE) {
-            // Since there will be atmost 1 message in stream record, call
-            //  destroy on stream record on message destory.
-            streams_consumer_record_destroy(
-                             rko->rko_rkmessage._streams_consumer_record);
-        }
+    if (rko->rko_flags & RD_KAFKA_OP_STREAMS_CONSUME_FREE) {
+        // Since there will be atmost 1 message in stream record, call
+        //  destroy on stream record on message destory.
+        streams_consumer_record_destroy(
+                rko->rko_rkmessage._streams_consumer_record);
     }
 
     if (rd_atomic32_sub(&rd_kafka_op_cnt, 1) < 0)
