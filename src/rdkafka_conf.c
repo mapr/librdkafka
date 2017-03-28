@@ -1465,6 +1465,7 @@ rd_kafka_conf_t *rd_kafka_conf_dup (const rd_kafka_conf_t *conf) {
 
 rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 						*conf) {
+    if (!conf) return NULL;
 	rd_kafka_topic_conf_t *new = rd_kafka_topic_conf_new();
 
 	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf);
