@@ -34,7 +34,7 @@ class ConsumerTest {
     static rd_kafka_resp_err_t runConsumerListTest (char *strName,
                                    const char *groupid,
                                    const struct rd_kafka_group_list ** glist);
-    static rd_kafka_resp_err_t runUnassignTest (char *strName, int nTopics, int npart);
+    static rd_kafka_resp_err_t runNullAssignTest (char *strName, int nTopics, int npart);
 };
 
 struct RebalanceCbCtx {

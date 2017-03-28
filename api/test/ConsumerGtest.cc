@@ -39,7 +39,7 @@ char *STREAM_UNSUBSCRIBE = "/gtest-ConsumerUnsubscribe";
 char *STREAM_CLOSE = "/gtest-ConsumerClose";
 char *STREAM_COMBINATION = "/gtest-ConsumerCombination";
 char *STREAM_CONSUMER_GR_LIST = "/gtest-consumerGrListTest";
-char *STREAM_UNASSIGN = "/gtest-ConsumerNullAssignTest";
+char *STREAM_NULLASSIGN = "/gtest-ConsumerNullAssignTest";
 
 class SubscribeTest: public testing::Test {
 
@@ -530,10 +530,10 @@ TEST (ConsumerTest, getConsumerGroupInfoTest) {
 /*-----------------------------------------------*/
 
 TEST (ConsumerTest, nullAssignTest) {
-  ASSERT_EQ (0, stream_create(STREAM_UNASSIGN, 1, 10));
-  ConsumerTest::runUnassignTest (STREAM_UNASSIGN, 2/*num of topics*/,
+  ASSERT_EQ (0, stream_create(STREAM_NULLASSIGN, 1, 10));
+  ConsumerTest::runNullAssignTest (STREAM_NULLASSIGN, 2/*num of topics*/,
                                 10/*num of patitions*/);
-  ASSERT_EQ (0, stream_delete(STREAM_UNASSIGN, 1));
+  ASSERT_EQ (0, stream_delete(STREAM_NULLASSIGN, 1));
 }
 
 int main (int argc, char **argv) {

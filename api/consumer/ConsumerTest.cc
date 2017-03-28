@@ -1091,7 +1091,7 @@ ConsumerTest::runConsumerListTest (char *strName, const char *groupid,
   return ret;
 }
 
-void unassigntest_rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
+void nullAssigntest_rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
                            rd_kafka_topic_partition_list_t *partitions,
                            void *opaque) {
   switch (err)
@@ -1108,7 +1108,7 @@ void unassigntest_rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
 }
 
 rd_kafka_resp_err_t
-ConsumerTest::runUnassignTest (char *strName, int nTopics, int npart){
+ConsumerTest::runNullAssignTest (char *strName, int nTopics, int npart){
   Producer p;
   uint64_t cb = 0;
   int produceMsg = 1000;
@@ -1132,7 +1132,7 @@ ConsumerTest::runUnassignTest (char *strName, int nTopics, int npart){
   rd_kafka_conf_set(conf1, "enable.auto.commit", "true", errstr, sizeof(errstr));
   rd_kafka_conf_set(conf1, "client.id", clientid1, errstr, sizeof(errstr));
   rd_kafka_conf_set(conf1, "group.id", group1, errstr, sizeof(errstr));
- rd_kafka_conf_set_rebalance_cb(conf1, unassigntest_rebalance_cb);
+ rd_kafka_conf_set_rebalance_cb(conf1, nullAssigntest_rebalance_cb);
   rd_kafka_topic_conf_t *topic_conf1 = rd_kafka_topic_conf_new();
   rd_kafka_topic_conf_set(topic_conf1, "auto.offset.reset", "earliest",
                                              errstr, sizeof(errstr));
@@ -1145,7 +1145,7 @@ ConsumerTest::runUnassignTest (char *strName, int nTopics, int npart){
   rd_kafka_conf_set(conf2, "enable.auto.commit", "true", errstr, sizeof(errstr));
   rd_kafka_conf_set(conf2, "client.id", clientid2, errstr, sizeof(errstr));
   rd_kafka_conf_set(conf2, "group.id", group1, errstr, sizeof(errstr));
- rd_kafka_conf_set_rebalance_cb(conf2, unassigntest_rebalance_cb);
+ rd_kafka_conf_set_rebalance_cb(conf2, nullAssigntest_rebalance_cb);
   rd_kafka_topic_conf_t *topic_conf2 = rd_kafka_topic_conf_new();
   rd_kafka_topic_conf_set(topic_conf2, "auto.offset.reset", "earliest",
                                              errstr, sizeof(errstr));
@@ -1179,14 +1179,14 @@ ConsumerTest::runUnassignTest (char *strName, int nTopics, int npart){
   assert (out_list->cnt == (nparts*ntopics /2));
 
   rd_kafka_topic_partition_list_destroy (out_list);
-  cout << "Unassign partitions" << endl;
+  cout << "Null assign partitions" << endl;
   err = rd_kafka_assign (consumer1, NULL);
   assert (err == 0);
   out_list = NULL;
   rd_kafka_assignment (consumer1, &out_list);
   assert (out_list->cnt == 0);
   rd_kafka_topic_partition_list_destroy (out_list);
-  cout << "Consecutive unassign partitions" << endl;
+  cout << "Consecutive null assign partitions" << endl;
   err = rd_kafka_assign (consumer1, NULL);
   assert (err == 0);
   out_list = NULL;
@@ -1194,7 +1194,7 @@ ConsumerTest::runUnassignTest (char *strName, int nTopics, int npart){
   assert (out_list->cnt == 0);
   rd_kafka_topic_partition_list_destroy (out_list);
   out_list = NULL;
-  cout << "Subscribe after unassign";
+  cout << "Subscribe after null assign";
   err = rd_kafka_subscribe (consumer1, tp_list2);
   assert (err == RD_KAFKA_RESP_ERR__CONFLICT);
   cout << " failed as expected" << endl;
