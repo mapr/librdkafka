@@ -1267,6 +1267,10 @@ streams_to_librdkafka_error_converter (int err, rd_kafka_op_type_t op_type) {
               return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
             else
               return RD_KAFKA_RESP_ERR__INVALID_ARG;
+    case EACCES:
+            if (op_type == RD_KAFKA_OP_FETCH)
+              return RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED;
+            // fall through
     default:
               return err;
   }

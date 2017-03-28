@@ -463,6 +463,17 @@ STREAMS_API int32_t
 streams_consumer_record_get_message_count(const streams_consumer_record_t cr,
                                           uint32_t *num_msgs);
 
+/** \brief Return the error in this consumer record
+  * \param consumer [IN] : consumer record
+  * \param error [OUT] : topic partition error
+  *
+  * \return 0 on success. EINVAL on invalid inputs.
+  *
+  * Return the error on topic partition.
+  */
+STREAMS_API int32_t
+streams_consumer_record_get_error(const streams_consumer_record_t cr,
+                                  int *error);
 
 /** \brief Destroy the consumer record
   * \param consumer [IN] : consumer record

@@ -3,6 +3,9 @@
 #include "rdkafka_topic.h"
 #include "streams_wrapper.h"
 
+rd_kafka_resp_err_t
+streams_to_librdkafka_error_converter(int err, rd_kafka_op_type_t op_type);
+
 int RD_TLS rd_kafka_yield_thread = 0;
 
 void rd_kafka_yield (rd_kafka_t *rk) {
@@ -248,6 +251,21 @@ static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
         return rko;
 }
 
+static rd_kafka_op_t *
+streams_setup_fetch_op(streams_consumer_record_t record, int32_t partitionId,
+                       rd_kafka_resp_err_t kafka_err) {
+  rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
+  rd_kafka_message_t *rkm = &rko->rko_rkmessage;
+  rkm->_streams_consumer_record = record;
+  rkm->err = kafka_err;
+  rkm->partition = partitionId;
+  rko->rko_rkmessage = *rkm;
+  rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
+  rko->rko_err = rkm->err;
+  rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+  return rko;
+}
+
 void  streams_populate_consumer_message (rd_kafka_t *rk,
 					 rd_kafka_q_t *rkq,
 					 streams_consumer_record_t record,
@@ -289,6 +307,16 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
 
     rd_kafka_wrunlock (rk);
     rkt = rd_kafka_topic_s2a(s_rkt);
+
+    int32_t error;
+    streams_consumer_record_get_error(record, &error);
+    if (error == EACCES) {
+      rd_kafka_resp_err_t kafka_err;
+      kafka_err = streams_to_librdkafka_error_converter(error, RD_KAFKA_OP_FETCH);
+      rd_kafka_op_t *rko = streams_setup_fetch_op(record, partitionId, kafka_err);
+      rd_kafka_q_enq (&rk->rk_cgrp->rkcg_q, rko);
+      return;
+    }
 
     uint32_t j = 0;
     for (j=0; j < numMsgs; j++) {
