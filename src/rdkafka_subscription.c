@@ -273,8 +273,9 @@ void streams_update_topic_list(rd_kafka_t *rk,
   //copy the complete list to populate all the elements on the data structure
   int i;
   *updated_topics = rd_kafka_topic_partition_list_copy (topics);
-  *is_def_str_conf = true;
+  *is_def_str_conf = false;
   if (rk->rk_conf.streams_consumer_default_stream_name) {
+    *is_def_str_conf = true;
     if (!*updated_topics)
       return;
     for (i = 0 ; i < (*updated_topics)->cnt ; i++) {
@@ -292,7 +293,8 @@ void streams_update_topic_list(rd_kafka_t *rk,
           rk->rk_conf.streams_consumer_default_stream_name, curr_t_name);
       (*updated_topics)->elems[i].topic = rd_strdup(new_t_str);
     }
-  } else {
+  } else if (is_streams_user(rk)) {
+    //existing consumer
     *is_def_str_conf = true;
   }
 }
