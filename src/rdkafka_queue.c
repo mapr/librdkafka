@@ -326,6 +326,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
         void *payload = NULL;
         rko = rd_kafka_op_new (RD_KAFKA_OP_FETCH);
         rd_kafka_message_t *rkm = &rko->rko_rkmessage;
+        rkm->is_streams_message = true;
         rkm->_streams_consumer_record = record;
         rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
         uint32_t key_len = 0;
@@ -367,7 +368,6 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
                     rkm->payload = payload;
                     rkm->rkt = rkt;
                     rkm->partition = partitionId;
-                    rkm->is_streams_message = true;
                     assert (numMsgs == 1);
                     rko->rko_rkmessage = *rkm;
                     rko->rko_err = rkm->err;
