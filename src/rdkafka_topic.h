@@ -166,6 +166,11 @@ bool is_streams_topic (rd_kafka_itopic_t *irkt);
 
 bool streams_is_valid_topic_name (const char * topic_name, bool *isRegex);
 
+int streams_get_topic_partition_list (rd_kafka_t *rk,
+                                      const rd_kafka_topic_partition_list_t *topics,
+                                      streams_topic_partition_t **streams_tps,
+                                      int *streams_count);
+
 int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 			     char ** streams_topics,
 					 int *tcount);

@@ -338,6 +338,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
         if (rkm->offset == 0) {
             rkm->err = RD_KAFKA_RESP_ERR__PARTITION_EOF;
             rkm->partition = partitionId;
+            rko->rko_rkmessage = *rkm;
             rko->rko_err = rkm->err;
             rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
             rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
@@ -368,6 +369,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
                     rkm->rkt = rkt;
                     rkm->partition = partitionId;
                     assert (numMsgs == 1);
+                    rko->rko_rkmessage = *rkm;
                     rko->rko_err = rkm->err;
                     rko->rko_rkt = rkm->rkt;
                     rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;

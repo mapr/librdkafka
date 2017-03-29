@@ -1094,6 +1094,54 @@ void streams_topic_free (char **streams_topics,
 	rd_free(streams_topics);
 }
 
+int streams_get_topic_partition_list (rd_kafka_t *rk,
+                                      const rd_kafka_topic_partition_list_t *topics,
+                                      streams_topic_partition_t **streams_tps,
+                                      int *streams_count) {
+  int streams_topic_count = 0;
+  int kafka_topic_count = 0;
+  *streams_count = 0;
+  int i;
+  if (!topics) {
+    if (rk->rk_conf.streams_consumer_default_stream_name)
+      return STREAMS_TOPICS;
+    else
+      return KAFKA_TOPICS;
+  }
+  *streams_tps = rd_malloc(topics->cnt * sizeof(streams_topic_partition_t));
+  for (i=0; i < topics->cnt; i++) {
+    const char *topic_name =  (topics->elems[i]).topic;
+    if (streams_is_valid_topic_name(topic_name, NULL)) {
+
+      streams_topic_partition_create(topic_name, (topics->elems[i]).partition,
+                                                  *streams_tps+streams_topic_count);
+      streams_topic_count++;
+    } else {
+      kafka_topic_count++;
+    }
+
+    if (streams_topic_count!=0 && kafka_topic_count!=0) {
+      goto errOut;
+    }
+  }
+
+  if (streams_topic_count > 0 ) {
+    if (rk->is_kafka_user)
+      goto errOut;
+
+    *streams_count = streams_topic_count;
+    return STREAMS_TOPICS;
+  } else if(kafka_topic_count > 0 ) {
+    streams_topic_partition_free (*streams_tps, streams_topic_count);
+    return KAFKA_TOPICS;
+  }
+
+  errOut:
+    streams_topic_partition_free (*streams_tps, streams_topic_count);
+	  return MIX_TOPICS;
+}
+
+
 int streams_get_topic_names (const rd_kafka_topic_partition_list_t *topics,
 			 char ** streams_topics,
 			 int *tcount) {
