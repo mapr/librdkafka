@@ -252,16 +252,20 @@ static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
 }
 
 static rd_kafka_op_t *
-streams_setup_fetch_op(streams_consumer_record_t record, int32_t partitionId,
+streams_setup_fetch_op(streams_consumer_record_t record,
+                       rd_kafka_topic_t *rkt,
+                       int32_t partitionId,
                        rd_kafka_resp_err_t kafka_err) {
   rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
   rd_kafka_message_t *rkm = &rko->rko_rkmessage;
   rkm->_streams_consumer_record = record;
   rkm->err = kafka_err;
+  rkm->rkt = rkt;
   rkm->partition = partitionId;
   rko->rko_rkmessage = *rkm;
   rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
   rko->rko_err = rkm->err;
+  rko->rko_rkt = rkm->rkt;
   rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
   return rko;
 }
@@ -313,7 +317,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
     if (error == EACCES) {
       rd_kafka_resp_err_t kafka_err;
       kafka_err = streams_to_librdkafka_error_converter(error, RD_KAFKA_OP_FETCH);
-      rd_kafka_op_t *rko = streams_setup_fetch_op(record, partitionId, kafka_err);
+      rd_kafka_op_t *rko = streams_setup_fetch_op(record, rkt, partitionId, kafka_err);
       rd_kafka_q_enq (&rk->rk_cgrp->rkcg_q, rko);
       return;
     }
@@ -328,7 +332,11 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
         rd_kafka_message_t *rkm = &rko->rko_rkmessage;
         rkm->is_streams_message = true;
         rkm->_streams_consumer_record = record;
+        rkm->partition = partitionId;
+        rkm->rkt = rkt;
         rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
+        rko->rko_err = rkm->err;
+        rko->rko_rkt = rkm->rkt;
         uint32_t key_len = 0;
         uint32_t val_len = 0;
 
@@ -337,7 +345,6 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
                 &(rkm->offset));
         if (rkm->offset == 0) {
             rkm->err = RD_KAFKA_RESP_ERR__PARTITION_EOF;
-            rkm->partition = partitionId;
             rko->rko_err = rkm->err;
             rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
             rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
@@ -365,11 +372,9 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
                 }
                 if (payload) {
                     rkm->payload = payload;
-                    rkm->rkt = rkt;
-                    rkm->partition = partitionId;
                     assert (numMsgs == 1);
+                    rkm->err = RD_KAFKA_RESP_ERR_NO_ERROR;
                     rko->rko_err = rkm->err;
-                    rko->rko_rkt = rkm->rkt;
                     rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
                     rko->rko_version = ver;
                     rd_kafka_q_enq (&(rk->rk_cgrp->rkcg_q), rko);
