@@ -121,7 +121,7 @@ TEST(ConfigTest, regularStreamWithproducerDefaultStreamProduceTest) {
 }
 TEST(ConfigTest, defaultMaxMesageSizeConfProduceTest) {
       producer_config_test (STREAM_CONFIG, "topic0", NULL, 1500, 1000000,
-                            STREAM_CONFIG, 0, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE);
+                            STREAM_CONFIG, 0, -1);
 }
 TEST(ConfigTest, lowerLimitMaxMessageSizeConfProduceTest) {
       producer_config_test (STREAM_CONFIG, "topic0", NULL, 1500, 500,
@@ -129,7 +129,11 @@ TEST(ConfigTest, lowerLimitMaxMessageSizeConfProduceTest) {
 }
 TEST(ConfigTest, upperLimitMaxMesageSizeConfProduceTest) {
       producer_config_test (STREAM_CONFIG, "topic0", NULL, 5, 1000000002,
-                            STREAM_CONFIG, 0, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE);
+                            STREAM_CONFIG, 0, -1);
+}
+TEST(ConfigTest, streamsUpperLimitMaxMesageSizeConfProduceTest) {
+      producer_config_test (STREAM_CONFIG, "topic0", NULL, 5, 100000000,
+                            STREAM_CONFIG, 0, -1);
 }
 
 /*-----------------------------------------------*/

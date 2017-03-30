@@ -781,6 +781,10 @@ static const char* streams_unsupported_properties[] = {
            "ssl.ca.location",
            "ssl.crl.location"
 };
+/**
+ * max_msg_size is capped at 10MB
+ */
+static const int streams_max_msg_size = 10000000;
 
 typedef enum {
 	_PROP_SET_REPLACE,  /* Replace current value (default) */
@@ -899,7 +903,18 @@ static int rd_kafka_conf_s2i_find (const struct rd_kafka_property *prop,
 	return -1;
 }
 
-
+/*
+ * This API caps the message.max.bytes value to 10MB for streams.
+ */
+static void streams_cap_max_msg_size (const struct rd_kafka_property *prop,
+                                          int *val) {
+  if ((strcmp(prop->name, "message.max.bytes") == 0) &&
+      (*val > streams_max_msg_size )) {
+      fprintf(stderr, "WARNING: Mapr-librdkafka does not support '%s' configuration value above %d. Produce call for a message size higher than %d will fail",
+          prop->name, streams_max_msg_size, streams_max_msg_size);
+    *val = streams_max_msg_size;
+  }
+}
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop (int scope, void *conf,
 			   const struct rd_kafka_property *prop,
@@ -1013,7 +1028,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 				 prop->vmax);
 			return RD_KAFKA_CONF_INVALID;
 		}
-
+		streams_cap_max_msg_size (prop, &ival);
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
 					   _PROP_SET_REPLACE,
                                            errstr, errstr_size);
