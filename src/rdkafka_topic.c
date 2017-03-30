@@ -1103,7 +1103,8 @@ int streams_get_topic_partition_list (rd_kafka_t *rk,
   *streams_count = 0;
   int i;
   if (!topics) {
-    if (rk->rk_conf.streams_consumer_default_stream_name)
+    if ((rk->rk_conf.streams_consumer_default_stream_name) ||
+        (is_streams_user (rk)))
       return STREAMS_TOPICS;
     else
       return KAFKA_TOPICS;
