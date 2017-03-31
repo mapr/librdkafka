@@ -107,7 +107,7 @@ TEST(ConfigTest, producerDefaultStreamProduceTest) {
 TEST(ConfigTest, producerDefaultStreamInvalidTopicProduceTest) {
     producer_config_test (NULL, "topic:topic",STREAM_PRODUCER_DEFAULT,
                              500, -1, STREAM_PRODUCER_DEFAULT, 0,
-                             RD_KAFKA_RESP_ERR__INVALID_ARG);
+                             RD_KAFKA_RESP_ERR_NO_ERROR);
 }
 TEST(ConfigTest, noDefaultStreamInvalidTopicProduceTest) {
     producer_config_test (NULL, "topic:topic", 0,
@@ -120,7 +120,7 @@ TEST(ConfigTest, regularStreamWithproducerDefaultStreamProduceTest) {
                              RD_KAFKA_RESP_ERR_NO_ERROR);
 }
 TEST(ConfigTest, defaultMaxMesageSizeConfProduceTest) {
-      producer_config_test (STREAM_CONFIG, "topic0", NULL, 1500, 1000000,
+      producer_config_test (STREAM_CONFIG, "topic0", NULL, 15, 1000000,
                             STREAM_CONFIG, 0, -1);
 }
 TEST(ConfigTest, lowerLimitMaxMessageSizeConfProduceTest) {
@@ -248,7 +248,7 @@ TEST_F(consumerDefaultStrConfigTest, kafkaConsumerInvalidGroupAssignTest) {
                                       defaultStrName));
 }
 TEST_F(consumerDefaultStrConfigTest, maprConsumerMaprTopicAssignTest) {
-  EXPECT_EQ(RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
+  EXPECT_EQ(SUCCESS, ConsumerTest::runSubscribeTest (strName, 2, 2, 4, true,
                                                      1, 0, "ConsumerTest", true,
                                                      defaultStrName));
 }

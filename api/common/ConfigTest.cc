@@ -16,7 +16,7 @@ int ConfigTest::runProducerConfigTest (char *str, char *topic,
   if (pDefaultStr) {
     char pStr[strlen(pDefaultStr) +1];
     memset (pStr, 0, strlen(pDefaultStr) +1);
-    snprintf (pStr, sizeof(pStr), "%s0", pDefaultStr);
+    snprintf (pStr, sizeof(pStr)+1, "%s0", pDefaultStr);
     rd_kafka_conf_set(conf, "streams.producer.default.stream", pStr,
                       errstr, sizeof(errstr));
   }

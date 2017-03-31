@@ -166,7 +166,7 @@ int ConsumerTest::runSubscribeTest (char *strName, int numStreams, int numTopics
     if (cDefaultStr) {
     char cStr[strlen(cDefaultStr) +1];
     memset (cStr, 0, strlen(cDefaultStr) +1);
-    snprintf (cStr, sizeof(cStr), "%s0", cDefaultStr);
+    snprintf (cStr, sizeof(cStr)+1, "%s0", cDefaultStr);
     rd_kafka_conf_set(conf, "streams.consumer.default.stream", cStr,
                       errstr, sizeof(errstr));
     }
