@@ -1193,13 +1193,13 @@ bool streams_version_compare (char *buf1, char *buf2){
   return ver_allowed;
 }
 
-bool streams_version_check () {
+bool streams_version_check (char *min_version) {
   bool err = true;
   char errStr[512];
   char *version = NULL;
   bool isPresent = is_funct_present("streams_mapr_build_version_get");
   snprintf(errStr, 512, "minimum required version: %s",
-                          STREAMS_MIN_VERSION);
+                          min_version);
   if(!isPresent)
     goto verErr;
 
@@ -1208,10 +1208,10 @@ bool streams_version_check () {
   if (!version)
     goto verErr;
 
-  if (!streams_version_compare (version, STREAMS_MIN_VERSION)) {
+  if (!streams_version_compare (version, min_version)) {
     memset (errStr, 0, 512);
     snprintf(errStr, 512, " current version: %s minimum required version: %s",
-            version, STREAMS_MIN_VERSION);
+            version, min_version);
     goto verErr;
   } else {
     goto end;
@@ -1228,7 +1228,7 @@ bool streams_version_check () {
 
 rd_kafka_conf_t *rd_kafka_conf_new (void) {
   if (!is_streams_compatible) {
-    if (!streams_version_check ())
+    if (!streams_version_check (STREAMS_MIN_VERSION))
       return NULL;
 
     is_streams_compatible = true;
@@ -2043,7 +2043,14 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, bool isSubscribe, s
 
   streams_config_set (*config, "enable.auto.commit",
                       conf.enable_auto_commit?"true":"false");
-  streams_config_set (*config, "streams.zerooffset.record.on.eof", "true");
+
+  if (streams_version_check("6.0.0"/*Config property name change*/)) {
+    streams_config_set (*config, "streams.negativeoffset.record.on.eof", "true");
+    EOF_OFFSET = EOF_OFFSET_V6;
+  } else {
+    streams_config_set (*config, "streams.zerooffset.record.on.eof", "true");
+    EOF_OFFSET = 0;
+  }
 
   memset (t_ms_str, 0, sizeof(t_ms_str));
   snprintf(t_ms_str, sizeof (t_ms_str), "%d", conf.auto_commit_interval_ms);

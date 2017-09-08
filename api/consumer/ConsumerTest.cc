@@ -722,10 +722,10 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid,
   rd_kafka_committed (consumer, out_list, 1000);
   bool verify = true;
   verify_topic_partition_list("Committed after 100 consumed messages.", out_list,
-                              numMsgs+1, verify, print);
+                              numMsgs, verify, print);
   rd_kafka_position (consumer, out_list);
   verify_topic_partition_list("Position after 100 consumed messages:" , out_list,
-                              numMsgs+1, verify, print);
+                              numMsgs, verify, print);
   // seek to offset 500
   rd_kafka_seek (rkt, 0, 500, 2000 );
   rd_kafka_position (consumer, out_list);
@@ -750,7 +750,7 @@ void ConsumerTest::runConsumerSeekPositionTest (char *strName, char * groupid,
   sleep (3);
   rd_kafka_committed (consumer, out_list, 1000);
   verify_topic_partition_list("Committed after 30 consumed messages.",  out_list,
-                              101, verify, print);
+                              100, verify, print);
 
   rd_kafka_position (consumer, out_list);
   verify_topic_partition_list("Position after 30 consumed messages:" ,  out_list,

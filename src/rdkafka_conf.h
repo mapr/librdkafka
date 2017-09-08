@@ -272,7 +272,9 @@ struct rd_kafka_topic_conf_s {
 	void   *opaque;
 };
 
-
+/* EOF offset returned by streams*/
+int EOF_OFFSET;
+static const int EOF_OFFSET_V6 = -1001;
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
 void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, bool isSubscribe, streams_config_t *config);

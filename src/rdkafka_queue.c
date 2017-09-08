@@ -343,7 +343,7 @@ void  streams_populate_consumer_message (rd_kafka_t *rk,
         streams_msg_get_offset (record,
                 j,
                 &(rkm->offset));
-        if (rkm->offset == 0) {
+        if (rkm->offset == EOF_OFFSET) {
             rkm->err = RD_KAFKA_RESP_ERR__PARTITION_EOF;
             rko->rko_err = rkm->err;
             rko->rko_tstype = RD_KAFKA_TIMESTAMP_CREATE_TIME;
