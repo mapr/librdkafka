@@ -2188,16 +2188,9 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 	rd_kafka_cgrp_t *rkcg;
 	rd_kafka_op_t *rko;
 	rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
-				bool was_streams_consumer = false;
 
 	if (!(rkcg = rd_kafka_cgrp_get(rk)))
 		return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
-
-	if (is_streams_consumer(rk)) {
-		streams_consumer_destroy(rk->streams_consumer);
-		rk->streams_consumer = NULL;
-		was_streams_consumer = true;
-	}
 
         rd_kafka_q_keep(&rkcg->rkcg_q);
         rd_kafka_cgrp_terminate(rkcg, &rkcg->rkcg_q); /* async */
@@ -2210,11 +2203,15 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
                 }
                 rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL);
 
-		if ((rko->rko_type == RD_KAFKA_OP_FETCH) && (was_streams_consumer))
+		if (rko->rko_type == RD_KAFKA_OP_FETCH)
 			streams_rd_kafka_op_destroy_wrapper(rko);
 		else
 			rd_kafka_op_destroy(rko);
         }
+	if (is_streams_consumer(rk)) {
+		streams_consumer_destroy(rk->streams_consumer);
+		rk->streams_consumer = NULL;
+	}
 
         rd_kafka_q_destroy(&rkcg->rkcg_q);
         return err;

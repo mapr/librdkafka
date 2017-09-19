@@ -527,7 +527,7 @@ int ConsumerTest::runCommitTest (char * strName, const char *groupid,
   int msgCount = 0;
   int   offset1=0;
   rd_kafka_topic_partition_t *rktpar;
-  while (msgCount < 12) {
+  while (msgCount < (produceMsg-1)) {
     rd_kafka_message_t *rkmessage;
     rkmessage = rd_kafka_consumer_poll (consumer, 100);
     if (rkmessage) {
@@ -558,7 +558,7 @@ int ConsumerTest::runCommitTest (char * strName, const char *groupid,
   if(topicInvalid)
     return commitResult;
   else if (offsetInvalid) // commit all
-    return 13;
+    return (produceMsg -1);
   else if (consumerInvalid)
     return commitResult;
   else

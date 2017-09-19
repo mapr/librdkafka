@@ -124,7 +124,7 @@ int verifyAndAddStats(rd_kafka_message_t *rkmessage, ConsumerPerfStats *stats,
     offsetCommitMap[newKey] = rkmessage->offset + 1;
   }
   stats->report(numBytes, 1);
-
+  rd_kafka_message_destroy (rkmessage);
   return 0;
 }
 
