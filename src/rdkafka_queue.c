@@ -262,6 +262,7 @@ streams_setup_fetch_op(streams_consumer_record_t record,
   rkm->err = kafka_err;
   rkm->rkt = rkt;
   rkm->partition = partitionId;
+  rkm->is_streams_message = true;
   rko->rko_rkmessage = *rkm;
   rko->rko_flags |= RD_KAFKA_OP_STREAMS_CONSUME_FREE;
   rko->rko_err = rkm->err;
