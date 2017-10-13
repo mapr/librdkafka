@@ -197,7 +197,8 @@ TEST(ProducerTest, msgProduceInvalidConfTest) {
 }
 
 TEST(ProducerTest, msgProduceInvalidKeyValTest) {
-  msg_produce_test_case(STREAM, 0, true, true, NULL, NULL, 0, 0);
+  /*Allow null key-value as of mapr v6.0.0*/
+  msg_produce_test_case(STREAM, 0, true, true, NULL, NULL, 0, 1/*verifyCount*/);
 }
 
 TEST(ProducerTest, msgProduceInvalidPartitionTest) {

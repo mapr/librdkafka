@@ -1436,7 +1436,9 @@ streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
     if (rko != NULL) assert (rko->rko_rkm != NULL);
 
     streams_producer_record_t record;
-    result = streams_producer_record_create(tp, (const char *)key, keylen,
+    result = streams_producer_record_create(tp,
+                                (rko != NULL)?(void *)rko->rko_rkm->rkm_key->data:key,
+                                keylen,
                                 (rko != NULL)?rko->rko_rkm->rkm_payload:payload,
                                 len, &record);
 
