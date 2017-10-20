@@ -1306,8 +1306,10 @@ static void streams_producer_handle_response_cb(int32_t err,
                                              void *ctx) {
 
     if (ctx == NULL) {
-        // Callback not requested by application.
-        return;
+      //if rko/ctx is null, free copied key.
+      //Case: msgflag=0 and dr_msg_cb callback is not configured
+      rd_free (key);
+      return;
     }
 
     rd_kafka_op_t *rko= (rd_kafka_op_t *) ctx;
@@ -1319,7 +1321,13 @@ static void streams_producer_handle_response_cb(int32_t err,
     rd_kafka_t *rk = itopic->rkt_rk;
 
     assert (rko->rko_rkm);
-    assert (streams_producer_is_cb_enabled(rk) == true);
+    if(!streams_producer_is_cb_enabled(rk)) {
+      //if cb is not configured then free the op and key/payload
+      streams_rd_kafka_msg_destroy(itopic->rkt_rk, rko->rko_rkm);
+      streams_rd_kafka_op_destroy_wrapper(rko);
+      return;
+    }
+
     assert (handle_error_in_cb_path(err));
 
     // Don't send if dr_err_only is set and there is no error.
@@ -1403,7 +1411,7 @@ streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
     bool got_tp = false;
     rd_kafka_resp_err_t result = RD_KAFKA_RESP_ERR_NO_ERROR;
     rd_kafka_op_t *rko = NULL; // Opaque pointer object to streams_producer_send.
-
+    char *copyKey = NULL;
     streams_topic_partition_t tp = NULL;
     result =  streams_get_topic_partition(irkt, partition, &tp);
 
@@ -1415,8 +1423,8 @@ streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
 
     got_tp = true;
 
-    // Only create the rko/ctx in case of callback.
-    if (streams_producer_is_cb_enabled(irkt->rkt_rk)) {
+    /*If msgflas == 0 then payload is user's responsibility*/
+    if (msgflags != 0 || streams_producer_is_cb_enabled(irkt->rkt_rk)) {
         rd_kafka_msg_t *rkm = NULL;
 
         rkm = streams_producer_msg_create (irkt, partition, msgflags, payload, len,
@@ -1432,12 +1440,29 @@ streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
         rko->rko_err = 0;
         rko->rko_rkt = irkt->rkt_app_rkt;
         rko->rko_rkm = rkm;
+    } else {
+        //rko is NULL but we should always copy key!
+        if (key && keylen < 1) {
+          result = RD_KAFKA_RESP_ERR__INVALID_ARG;
+          goto error;
+        }
+        if (!key && keylen > 0) {
+          result = RD_KAFKA_RESP_ERR__INVALID_ARG;
+          goto error;
+        }
+        //Valid Cases.
+        if (key){
+          copyKey =  rd_malloc (sizeof (char) * keylen);
+          memcpy(copyKey, key, keylen);
+        } else {
+          copyKey = NULL;
+        }
     }
     if (rko != NULL) assert (rko->rko_rkm != NULL);
 
     streams_producer_record_t record;
     result = streams_producer_record_create(tp,
-                                (rko != NULL)?(void *)rko->rko_rkm->rkm_key->data:key,
+                                (rko != NULL)?(void*)rko->rko_rkm->rkm_key->data:copyKey,
                                 keylen,
                                 (rko != NULL)?rko->rko_rkm->rkm_payload:payload,
                                 len, &record);
@@ -1471,6 +1496,8 @@ streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
         rko->rko_rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
         streams_rd_kafka_msg_destroy(irkt->rkt_rk, rko->rko_rkm);
         streams_rd_kafka_op_destroy_wrapper(rko);
+    } else {
+        rd_free (copyKey);
     }
 
   out:
