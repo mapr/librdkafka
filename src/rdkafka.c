@@ -1442,11 +1442,11 @@ streams_producer_send_wrapper (rd_kafka_itopic_t *irkt,
         rko->rko_rkm = rkm;
     } else {
         //rko is NULL but we should always copy key!
-        if (key && keylen < 1) {
+        if (unlikely(key && keylen < 1)) {
           result = RD_KAFKA_RESP_ERR__INVALID_ARG;
           goto error;
         }
-        if (!key && keylen > 0) {
+        if (unlikely(!key && keylen > 0)) {
           result = RD_KAFKA_RESP_ERR__INVALID_ARG;
           goto error;
         }
