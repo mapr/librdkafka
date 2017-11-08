@@ -1193,7 +1193,7 @@ bool streams_version_compare (char *buf1, char *buf2){
   return ver_allowed;
 }
 
-bool streams_version_check (char *min_version) {
+bool streams_version_check (char *min_version, bool report_error) {
   bool err = true;
   char errStr[512];
   char *version = NULL;
@@ -1219,7 +1219,8 @@ bool streams_version_check (char *min_version) {
 
   verErr:
     err = false;
-    fprintf(stderr, "LIBRARY_MISMATCH: LibMapRClient.so %s", errStr);
+    if(report_error)
+      fprintf(stderr, "LIBRARY_MISMATCH: LibMapRClient.so %s", errStr);
 
   end:
     if(version) streams_mapr_build_version_destroy(version);
@@ -1228,7 +1229,7 @@ bool streams_version_check (char *min_version) {
 
 rd_kafka_conf_t *rd_kafka_conf_new (void) {
   if (!is_streams_compatible) {
-    if (!streams_version_check (STREAMS_MIN_VERSION))
+    if (!streams_version_check (STREAMS_MIN_VERSION, true/*report_error*/))
       return NULL;
 
     is_streams_compatible = true;
@@ -2044,7 +2045,7 @@ void streams_kafka_mapped_streams_config_set(rd_kafka_t *rk, bool isSubscribe, s
   streams_config_set (*config, "enable.auto.commit",
                       conf.enable_auto_commit?"true":"false");
 
-  if (streams_version_check("6.0.0"/*Config property name change*/)) {
+  if (streams_version_check("6.0.0"/*Config property name change*/,false/*report_error*/)) {
     streams_config_set (*config, "streams.negativeoffset.record.on.eof", "true");
     EOF_OFFSET = EOF_OFFSET_V6;
   } else {
