@@ -334,7 +334,7 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                                         cert->chain = ca;
                                 else
                                         sk_X509_pop_free(cert->chain,
-                                                X509_free);
+                                                         X509_free);
                         }
                 } break;
 
