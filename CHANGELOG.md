@@ -1,3 +1,12 @@
+# librdkafka v2.6.2
+
+librdkafka v2.6.2 is a maintenance release:
+
+* Avoid sending client certificates whose chain doesn't match with broker
+  trusted root certificates (#4900).
+
+
+
 # librdkafka v2.6.1
 
 librdkafka v2.6.1 is a maintenance release:
