@@ -3144,11 +3144,10 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                     sizeof(assigned_topic_partitions_str), 0);
                         }
 
-                        rd_kafka_dbg(
-                            rk, CGRP, "HEARTBEAT",
-                            "ConsumerGroupHeartbeat received target "
-                            "assignment \"%s\"",
-                            assigned_topic_partitions_str);
+                        rd_kafka_dbg(rk, CGRP, "HEARTBEAT",
+                                     "ConsumerGroupHeartbeat received target "
+                                     "assignment \"%s\"",
+                                     assigned_topic_partitions_str);
                 }
 
                 if (assigned_topic_partitions) {
