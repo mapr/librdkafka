@@ -280,6 +280,7 @@ void do_test_OffsetCommit_automatic_stale_member(
         }
 
         /* Otherwise partition is committed before leaving the group */
+        test_consumer_close(consumer);
         rd_kafka_destroy(consumer);
 
 
@@ -302,7 +303,9 @@ void do_test_OffsetCommit_automatic_stale_member(
                 test_consumer_poll_no_msgs("no messages", consumer, testid,
                                            200);
         }
+        test_consumer_close(consumer);
         rd_kafka_destroy(consumer);
+        rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_OffsetCommit);
 
         SUB_TEST_PASS();
 }

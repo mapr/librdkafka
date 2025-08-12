@@ -3085,8 +3085,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
 
-        if (rd_kafka_cgrp_will_leave(rkcg))
-                err = RD_KAFKA_RESP_ERR__OUTDATED;
         if (err)
                 goto err;
 
@@ -3106,6 +3104,18 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
+        rkcg->rkcg_generation_id = member_epoch;
+
+        rd_kafka_dbg(rk, CGRP, "HEARTBEAT",
+                     "ConsumerGroupHeartbeat response received for "
+                     "member id \"%.*s\" with epoch %d",
+                     RD_KAFKAP_STR_PR(&member_id), member_epoch);
+
+        if (rd_kafka_cgrp_will_leave(rkcg)) {
+                err = RD_KAFKA_RESP_ERR__OUTDATED;
+                goto err;
+        }
+
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
 
         int8_t are_assignments_present;
@@ -3136,7 +3146,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
                         rd_kafka_dbg(
                             rk, CGRP, "HEARTBEAT",
-                            "ConsumerGroupHeartbeat response received target "
+                            "ConsumerGroupHeartbeat received target "
                             "assignment \"%s\"",
                             assigned_topic_partitions_str);
                 }
