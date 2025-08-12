@@ -1728,7 +1728,7 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
 
                 rktpar->err = partition->err;
                 if (partition->err) {
-                        err         = partition->err;
+                        err = partition->err;
                         errcnt++;
                         /* Accumulate actions for per-partition
                          * errors. */
