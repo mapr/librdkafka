@@ -310,6 +310,99 @@ void do_test_OffsetCommit_automatic_stale_member(
         SUB_TEST_PASS();
 }
 
+// static rd_bool_t is_heartbeat_request(rd_kafka_mock_request_t *request,
+//                                       void *opaque) {
+//         return rd_kafka_mock_request_api_key(request) ==
+//                RD_KAFKAP_ConsumerGroupHeartbeat;
+// }
+
+// static rd_bool_t is_ofset_commit_request(rd_kafka_mock_request_t *request,
+//                                       void *opaque) {
+//         return rd_kafka_mock_request_api_key(request) ==
+//                RD_KAFKAP_OffsetCommit;
+// }
+
+// void do_test_OffsetCommit_consumer_close_stale_member_error(
+//     rd_kafka_mock_cluster_t *mcluster, const char *bootstraps) {
+//         rd_kafka_t *consumer;
+//         test_msgver_t mv;
+//         rd_kafka_conf_t *conf;
+//         const char *topic           = test_mk_topic_name(__FUNCTION__, 1);
+//         uint64_t testid             = test_id_generate();
+//         const int msgcnt            = 1000;
+//         size_t offset_commit_request_count = 0;
+//         size_t start_offset_commit_request_count = 0;
+//         size_t heartbeat_request_count = 0;
+
+//         SUB_TEST_QUICK("Consumer close with stale member error");
+
+//         rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+//         rd_kafka_mock_set_group_consumer_session_timeout_ms(mcluster, 30000);
+//         rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 5000);
+
+//         test_conf_init(&conf, NULL, 30);
+//         test_conf_set(conf, "bootstrap.servers", bootstraps);
+//         test_conf_set(conf, "auto.offset.reset", "earliest");
+//         test_conf_set(conf, "enable.auto.commit", "true");
+//         test_conf_set(conf, "auto.commit.interval.ms", "3000");
+
+//         /* Seed the topic with messages */
+//         test_produce_msgs_easy_v(topic, testid, 0, 0, msgcnt, 0,
+//                                  "bootstrap.servers", bootstraps, NULL);
+
+//         /* Consume same messages */
+//         consumer =
+//             test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+//         test_consumer_subscribe(consumer, topic);
+
+//         rd_kafka_mock_start_request_tracking(mcluster);
+
+//         start_offset_commit_request_count = test_mock_get_matching_request_cnt(
+//             mcluster, is_ofset_commit_request, NULL);
+
+//         while(offset_commit_request_count <= start_offset_commit_request_count) {
+//             rd_sleep(1);
+//             test_consumer_poll_exact("received some messages", consumer, testid, -1, 0,
+//                                      20, rd_true, NULL);
+//             offset_commit_request_count = test_mock_get_matching_request_cnt(
+//                 mcluster, is_ofset_commit_request, NULL);
+//         }
+
+//         rd_kafka_mock_stop_request_tracking(mcluster);
+
+//         rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_OffsetCommit);
+       
+//         rd_kafka_mock_push_request_errors(
+//             mcluster, RD_KAFKAP_OffsetCommit, 10,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+//             RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH);
+
+//         rd_sleep(5);
+
+//         rd_kafka_mock_start_request_tracking(mcluster);
+//         test_consumer_close(consumer);
+
+//         heartbeat_request_count = test_mock_get_matching_request_cnt(
+//             mcluster, is_heartbeat_request, NULL);
+
+//         TEST_ASSERT(heartbeat_request_count > 1,
+//                     "Expected at least 2 Heartbeat requests, got %zu",
+//                     heartbeat_request_count);
+
+//         rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_OffsetCommit);
+//         rd_kafka_mock_stop_request_tracking(mcluster);
+
+//         rd_kafka_destroy(consumer);
+// }
+
 int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
@@ -340,6 +433,9 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
         for (i = 0; i < 4; i++)
                 do_test_OffsetCommit_automatic_stale_member(mcluster,
                                                             bootstraps, i);
+
+        // do_test_OffsetCommit_consumer_close_stale_member_error(
+        //     mcluster, bootstraps);
 
         test_mock_cluster_destroy(mcluster);
 
