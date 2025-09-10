@@ -120,6 +120,12 @@ void do_test_OffsetFetch_stale_member_epoch_error(
         SUB_TEST_PASS();
 }
 
+typedef enum test_manual_commit_variation_s {
+        TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_AUTOMATICALLY = 0,
+        TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_MANUALLY      = 1,
+        TEST_MANUAL_COMMIT_VARIATION__CNT,
+} test_manual_commit_variation_t;
+
 /**
  * @brief Doing a manual commits that returns error \p expected_err
  *        should return the error to the caller, even if the error
@@ -128,13 +134,16 @@ void do_test_OffsetFetch_stale_member_epoch_error(
  *
  *        Variations:
  *
- *        - variation 0: commit stored offsets passing NULL
- *        - variation 1: commit passed offsets
+ *        - TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_AUTOMATICALLY: commit
+ * stored offsets passing NULL
+ *        - TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_MANUALLY: commit passed
+ * offsets
  */
-void do_test_OffsetCommit_manual_error(rd_kafka_mock_cluster_t *mcluster,
-                                       const char *bootstraps,
-                                       rd_kafka_resp_err_t expected_err,
-                                       int variation) {
+void do_test_OffsetCommit_manual_error(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *bootstraps,
+    rd_kafka_resp_err_t expected_err,
+    test_manual_commit_variation_t variation) {
         rd_kafka_t *consumer;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
@@ -172,7 +181,7 @@ void do_test_OffsetCommit_manual_error(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_OffsetCommit, 1,
                                           expected_err);
 
-        if (variation == 1) {
+        if (variation == TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_MANUALLY) {
                 /* Variation 1: pass offsets to commit */
                 to_commit = rd_kafka_topic_partition_list_new(1);
                 rd_kafka_topic_partition_list_add(to_commit, topic, 0)->offset =
@@ -198,6 +207,14 @@ void do_test_OffsetCommit_manual_error(rd_kafka_mock_cluster_t *mcluster,
         SUB_TEST_PASS();
 }
 
+typedef enum test_error_variation_case_s {
+        TEST_ERROR_VARIATION_CASE_NO_REVOKE_NO_TIMEOUT   = 0,
+        TEST_ERROR_VARIATION_CASE_NO_REVOKE_WITH_TIMEOUT = 1,
+        TEST_ERROR_VARIATION_CASE_REVOKE_NO_TIMEOUT      = 2,
+        TEST_ERROR_VARIATION_CASE_REVOKE_WITH_TIMEOUT    = 3,
+        TEST_ERROR_VARIATION_CASE__CNT,
+} test_error_variation_case_t;
+
 /**
  * @brief When a partition is revoked, with auto-commit enabled,
  *        if the RPC returns STALE_MEMBER_EPOCH for one of the
@@ -214,15 +231,19 @@ void do_test_OffsetCommit_manual_error(rd_kafka_mock_cluster_t *mcluster,
  *                           When session times out the auto-commit fails
  *                           and messages are consumed again.
  *
- *        - variation 0: during_revocation=false, session_times_out=false
- *        - variation 1: during_revocation=false, session_times_out=true
- *        - variation 2: during_revocation=true, session_times_out=false
- *        - variation 3: during_revocation=true, session_times_out=true
+ *        - TEST_ERROR_VARIATION_NO_REVOKE_NO_TIMEOUT: during_revocation=false,
+ * session_times_out=false
+ *        - TEST_ERROR_VARIATION_NO_REVOKE_WITH_TIMEOUT:
+ * during_revocation=false, session_times_out=true
+ *        - TEST_ERROR_VARIATION_REVOKE_NO_TIMEOUT: during_revocation=true,
+ * session_times_out=false
+ *        - TEST_ERROR_VARIATION_REVOKE_WITH_TIMEOUT: during_revocation=true,
+ * session_times_out=true
  */
 void do_test_OffsetCommit_automatic_stale_member_epoch_error(
     rd_kafka_mock_cluster_t *mcluster,
     const char *bootstraps,
-    int variation) {
+    test_error_variation_case_t variation) {
         rd_kafka_t *consumer;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
@@ -359,7 +380,7 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
 
         do_test_OffsetFetch_stale_member_epoch_error(mcluster, bootstraps);
 
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < TEST_MANUAL_COMMIT_VARIATION__CNT; i++) {
                 do_test_OffsetCommit_manual_error(
                     mcluster, bootstraps, RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
                     i);
@@ -368,7 +389,7 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
                     i);
         }
 
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < TEST_ERROR_VARIATION_CASE__CNT; i++)
                 do_test_OffsetCommit_automatic_stale_member_epoch_error(
                     mcluster, bootstraps, i);
 
