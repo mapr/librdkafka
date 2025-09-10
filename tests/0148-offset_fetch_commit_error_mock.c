@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2023, Confluent Inc.
+ * Copyright (c) 2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,23 @@
 
 #include <stdarg.h>
 
+
+static mtx_t log_lock;
+static cnd_t log_cnd;
+static rd_bool_t revocation_done = rd_false;
+
+static void
+log_cb(const rd_kafka_t *rk, int level, const char *fac, const char *buf) {
+        if (strstr(buf,
+                   "assignment operations done in join-state "
+                   "wait-incr-unassign-to-complete")) {
+                mtx_lock(&log_lock);
+                revocation_done = rd_true;
+                cnd_signal(&log_cnd);
+                mtx_unlock(&log_lock);
+        }
+}
+
 /**
  * @brief A stale member error during an OffsetFetch should cause
  *        to retry the operation just after next ConsumerGroupHeartbeat
@@ -39,8 +56,9 @@
  *        The offset fetch eventually succeeds and the consumer can
  *        start from the committed offset.
  */
-void do_test_OffsetFetch_stale_member_error(rd_kafka_mock_cluster_t *mcluster,
-                                            const char *bootstraps) {
+void do_test_OffsetFetch_stale_member_epoch_error(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *bootstraps) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_t *producer, *first_consumer, *second_consumer;
         rd_kafka_conf_t *conf, *producer_conf;
@@ -201,7 +219,7 @@ void do_test_OffsetCommit_manual_error(rd_kafka_mock_cluster_t *mcluster,
  *        - variation 2: during_revocation=true, session_times_out=false
  *        - variation 3: during_revocation=true, session_times_out=true
  */
-void do_test_OffsetCommit_automatic_stale_member(
+void do_test_OffsetCommit_automatic_stale_member_epoch_error(
     rd_kafka_mock_cluster_t *mcluster,
     const char *bootstraps,
     int variation) {
@@ -209,29 +227,39 @@ void do_test_OffsetCommit_automatic_stale_member(
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *target_assignment_partitions;
-        const char *topic           = test_mk_topic_name(__FUNCTION__, 1);
-        uint64_t testid             = test_id_generate();
-        const int msgcnt            = 5;
-        rd_bool_t during_revocation = (variation / 2) == 1;
-        rd_bool_t session_times_out = (variation % 2) == 1;
+        const char *topic               = test_mk_topic_name(__FUNCTION__, 1);
+        uint64_t testid                 = test_id_generate();
+        const int msgcnt                = 5;
+        const int session_timeout_ms    = 3000;
+        const int heartbeat_interval_ms = 1000;
+        rd_bool_t during_revocation     = (variation / 2) == 1;
+        rd_bool_t session_times_out     = (variation % 2) == 1;
+        const char *debug_contexts[2]   = {"cgrp", NULL};
 
         SUB_TEST_QUICK("during_revocation=%s, session_times_out=%s",
                        RD_STR_ToF(during_revocation),
                        RD_STR_ToF(session_times_out));
 
-        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 2);
         rd_kafka_mock_coordinator_set(mcluster, "group", topic, 1);
-        rd_kafka_mock_set_group_consumer_session_timeout_ms(mcluster, 10000);
+        rd_kafka_mock_set_group_consumer_session_timeout_ms(mcluster,
+                                                            session_timeout_ms);
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(
+            mcluster, heartbeat_interval_ms);
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.auto.commit", "true");
+        test_conf_set(conf, "auto.commit.interval.ms", "1000");
         test_conf_set(conf, "group.protocol", "consumer");
+        test_conf_set_log_interceptor(conf, log_cb, debug_contexts);
 
         /* Seed the topic with messages */
-        test_produce_msgs_easy_v(topic, testid, 0, 0, msgcnt, 0,
-                                 "bootstrap.servers", bootstraps, NULL);
+        test_produce_msgs_easy_v(topic, testid, 0, 0, 3, 0, "bootstrap.servers",
+                                 bootstraps, NULL);
+        test_produce_msgs_easy_v(topic, testid, 1, 0, 2, 0, "bootstrap.servers",
+                                 bootstraps, NULL);
 
         /* Consume same messages */
         consumer =
@@ -240,43 +268,46 @@ void do_test_OffsetCommit_automatic_stale_member(
         test_msgver_init(&mv, testid);
         test_consumer_poll_exact("receive first batch", consumer, testid, -1, 0,
                                  msgcnt, rd_true, &mv);
-        test_msgver_verify("verify first batch", &mv, TEST_MSGVER_ALL, 0,
+        test_msgver_verify("verify first batch", &mv, TEST_MSGVER_PER_PART, 0,
                            msgcnt);
         test_msgver_clear(&mv);
 
 
         rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_OffsetCommit);
 
-        /* First sequence of stale member epoch for 2 s */
+        /* First sequence of stale member epoch for 4 s */
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_OffsetCommit, 4,
                                           RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
                                           RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
                                           RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
                                           RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH);
 
-        if (session_times_out) {
-                /* Simulate a session timeout after that */
-                rd_kafka_mock_push_request_errors(
-                    mcluster, RD_KAFKAP_OffsetCommit, 4,
-                    RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
-                    RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
-                    RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
-                    RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID);
-        }
-
         if (during_revocation) {
                 /* Changing target assignment to partition 0 only,
                  * partition revoked and automatically committed,
                  * but the commit fails. */
                 target_assignment_partitions =
-                    rd_kafka_topic_partition_list_new(2);
+                    rd_kafka_topic_partition_list_new(1);
                 rd_kafka_topic_partition_list_add(target_assignment_partitions,
                                                   topic, 0);
                 test_mock_cluster_member_assignment(
                     mcluster, 1, consumer, target_assignment_partitions);
                 rd_kafka_topic_partition_list_destroy(
                     target_assignment_partitions);
-                rd_sleep(1);
+
+                mtx_lock(&log_lock);
+                while (!revocation_done)
+                        cnd_timedwait_ms(&log_cnd, &log_lock, 500);
+                revocation_done = rd_false;
+                mtx_unlock(&log_lock);
+        }
+
+        if (session_times_out) {
+                /* Simulate a session timeout after that */
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, 1, RD_KAFKAP_OffsetCommit, 1,
+                    RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+                    session_timeout_ms + heartbeat_interval_ms);
         }
 
         /* Otherwise partition is committed before leaving the group */
@@ -296,7 +327,7 @@ void do_test_OffsetCommit_automatic_stale_member(
                 test_consumer_poll_exact("messages consumed again", consumer,
                                          testid, -1, 0, msgcnt, rd_true, &mv);
                 test_msgver_verify("messages consumed again", &mv,
-                                   TEST_MSGVER_ALL, 0, msgcnt);
+                                   TEST_MSGVER_PER_PART, 0, msgcnt);
                 test_msgver_clear(&mv);
         } else {
                 /* No message should be consumer after the autocommit */
@@ -326,7 +357,7 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
 
-        do_test_OffsetFetch_stale_member_error(mcluster, bootstraps);
+        do_test_OffsetFetch_stale_member_epoch_error(mcluster, bootstraps);
 
         for (i = 0; i < 2; i++) {
                 do_test_OffsetCommit_manual_error(
@@ -338,8 +369,8 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
         }
 
         for (i = 0; i < 4; i++)
-                do_test_OffsetCommit_automatic_stale_member(mcluster,
-                                                            bootstraps, i);
+                do_test_OffsetCommit_automatic_stale_member_epoch_error(
+                    mcluster, bootstraps, i);
 
         test_mock_cluster_destroy(mcluster);
 

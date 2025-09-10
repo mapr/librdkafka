@@ -3117,14 +3117,12 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
-
-        int8_t are_assignments_present;
-        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
-        rkcg->rkcg_generation_id = member_epoch;
         if (heartbeat_interval_ms > 0) {
                 rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;
         }
 
+        int8_t are_assignments_present;
+        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
         if (are_assignments_present == 1) {
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
